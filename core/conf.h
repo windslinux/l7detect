@@ -20,6 +20,19 @@ enum {
     MODE_SE,
 };
 
+typedef struct lua_conf_data {
+    list_head_t list;
+    char *key;
+    char *value;
+} lua_conf_data_t;
+
+typedef struct lua_data_head {
+	int16_t lua_type;
+    uint16_t item_num;
+    struct lua_data_head *next;
+    list_head_t list;
+} lua_data_head_t;
+
 typedef struct session_conf {
 	uint32_t bucket_num;
 	uint32_t session_expire_time;

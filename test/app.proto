@@ -2,11 +2,15 @@ gstate = {init=0, s1=1, s2=2, s3=3, s4=4, s5=5, s6=6, s7=7, s8=8, final=9}
 --lde引擎是顺序匹配，顺序由proto_list决定
 proto_list={"qq_talk", "ppstream", "qqlive", "http", "dns", "ssl", "nat",
 			"sametime", "qq_file", "ssh"}
-engine_list={"pde", "lde"}
+engine_list={"pde", "sde", "lde"}
 pkb_dir = {up=1, down=2}
 
 qq_talk = {}
 qq_talk.pde="udp/8000,tcp/8000,tcp/14000"
+qq_talk.sde={
+                {["0"]="0x02|0x03", ["-1"]="0x08", ["2"]="0x09", ["3"]="0x10"};
+                {["1"]="0x9", ["2-3"]="0x0405"}
+            }
 qq_talk.lde = function(buf, session)
 			  local state = gstate.init
 			  if (buf:len() >= 2) then
@@ -93,6 +97,8 @@ sametime.pde = "tcp/1533"
 
 ssh = {}
 ssh.pde = "tcp/22"
+
+--print(qq_talk.sde[1][-1])
 --[[for k, v in pairs(qq_chat)
 do
 print(k,v)

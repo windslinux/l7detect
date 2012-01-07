@@ -19,16 +19,15 @@ API_CFLAGS_LOCAL := -I$(d) -I$(TOP)/api -fPIC
 
 $(OBJS_$(d)):  CFLAGS_LOCAL := $(API_CFLAGS_LOCAL)
 
-
 #  standard component Makefile rules
 
 DEPS_$(d)   :=  $(OBJS_$(d):.o=.d)
 
 LIBS_LIST   :=  $(LIBS_LIST) $(LIBRARY)
 
-CLEAN_LIST := $(CLEAN_LIST) 
-CLEAN_LIST += $(OBJS_$(d)) 
-CLEAN_LIST += $(DEPS_$(d)) 
+CLEAN_LIST := $(CLEAN_LIST)
+CLEAN_LIST += $(OBJS_$(d))
+CLEAN_LIST += $(DEPS_$(d))
 CLEAN_LIST += $(LIBRARY) *~
 
 -include $(DEPS_$(d))
@@ -41,6 +40,20 @@ $(OBJ_DIR)/%.o: $(d)/%.c
 	$(COMPILE)
 
 #  standard component Makefile footer
+sp              :=  $(sp).x
+dirstack_$(sp)  :=  $(d)
+d               :=  $(dir)
+
+#  component specification
+
+dir = $(d)/snort_dfa
+include $(dir)/snort_dfa.mk
+
+#  standard component Makefile footer
+
+d   :=  $(dirstack_$(sp))
+sp  :=  $(basename $(sp))
+
 
 d   :=  $(dirstack_$(sp))
 sp  :=  $(basename $(sp))

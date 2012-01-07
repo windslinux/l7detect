@@ -123,6 +123,53 @@ uint32_t __read_file(char *filename, char **rd_buf, int init_size, int step)
 	return read_size;
 }
 
+void __get_lua_table_config(lua_State *L, void **data)
+{
+    uint32_t table_num, index;
+    lua_data_head_t *head = NULL;
+    lua_conf_data_t *item;
+    const char *tmp;
+    uint32_t i;
+    void **pp;
+
+    table_num = lua_objlen(L, -1);
+    pp = data;
+
+    for (i=1; i<=table_num; i++) {
+        int flag = 1;
+        lua_rawgeti(L, -1, i);
+        index = lua_gettop(L);
+        lua_pushnil(L);
+        while (lua_next(L, index) != 0) {
+            if (flag) {
+                head = zmalloc(lua_data_head_t *, sizeof(lua_data_head_t));
+                LIST_HEAD_INIT(&head->list);
+                assert(head);
+                *pp = head;
+                flag = 0;
+            }
+            assert(lua_type(L, -1) == LUA_TSTRING);
+            assert(lua_type(L, -2) == LUA_TSTRING);
+            item = zmalloc(lua_conf_data_t *, sizeof(lua_conf_data_t));
+            assert(item);
+            tmp = lua_tostring(L, -2);
+            item->key = malloc(strlen(tmp));
+            assert(item->key);
+            strcpy(item->key, tmp);
+            tmp = lua_tostring(L, -1);
+            item->value = malloc(strlen(tmp));
+            assert(item->value);
+            strcpy(item->value, tmp);
+            printf("%s, %s\n", item->key, item->value);
+            lua_pop(L, 1);
+            list_add_tail(&item->list, &head->list);
+        }
+        lua_pop(L, 1);
+        if (flag == 0) {
+            pp = (void *)&head->next;
+        }
+    }
+}
 int32_t __proto_item_read(lua_State *L, char *proto_name, int index, sf_proto_conf_t *conf)
 {
 	uint32_t i;
@@ -154,7 +201,12 @@ int32_t __proto_item_read(lua_State *L, char *proto_name, int index, sf_proto_co
 			p->engine_data[i].data = malloc(strlen(str) + 1);
 			assert(p->engine_data[i].data);
 			strcpy(p->engine_data[i].data, str);
-		}
+		} else if (type == LUA_TTABLE) {
+            ldlua_table_raw_get(L, proto_name);
+            lua_getfield(L, -1, conf->engines[i].name);
+            __get_lua_table_config(L, &p->engine_data[i].data);
+            lua_pop(L, 2); /*balance the stack*/
+      }
 	}
 	return 0;
 }
@@ -213,7 +265,6 @@ sf_proto_conf_t *__proto_conf_read()
 	assert(proto_num);
 	sf_conf->total_proto_num = proto_num;
 	sf_conf->protos = zmalloc(proto_conf_t *, proto_num * sizeof(proto_conf_t));
-
 	for (i=1; i<=proto_num; i++) {
 		char *proto_name;
 		proto_name = ldlua_table_raw_get_string(L, PROTO_LIST_NAME, i);
@@ -227,6 +278,7 @@ sf_proto_conf_t *__proto_conf_read()
 
 	__proto_conf_show(sf_conf);
 
+    assert(lua_gettop(L) == 0);
 	lua_close(L);
 	return sf_conf;
 }
