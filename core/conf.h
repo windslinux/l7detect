@@ -20,19 +20,6 @@ enum {
     MODE_SE,
 };
 
-typedef struct lua_conf_data {
-    list_head_t list;
-    char *key;
-    char *value;
-} lua_conf_data_t;
-
-typedef struct lua_data_head {
-	int16_t lua_type;
-    uint16_t item_num;
-    struct lua_data_head *next;
-    list_head_t list;
-} lua_data_head_t;
-
 typedef struct session_conf {
 	uint32_t bucket_num;
 	uint32_t session_expire_time;
@@ -40,15 +27,23 @@ typedef struct session_conf {
 	char *session_logname;
 } session_conf_t;
 
-typedef struct proto_engine_data {
+typedef struct proto_data {
+    list_head_t list;
+    char *key;
+    char *value;
+} proto_data_t;
+
+typedef struct proto_data_head {
 	int16_t lua_type;
-	void *data;
-} proto_engine_data_t;
+    uint16_t item_num;
+    struct proto_data_head *next;
+    list_head_t list;
+} proto_data_head_t;
 
 typedef struct proto_conf {
 	char *name;
 	uint32_t engine_mask;
-	proto_engine_data_t *engine_data;
+	proto_data_head_t *engine_head;
 } proto_conf_t;
 
 typedef struct detect_engine {

@@ -64,16 +64,19 @@ static int32_t __parse_pde_proto_conf(proto_conf_t *proto_conf,
 	char *pde_str, *p, *q;
 	uint16_t proto, port;
 	int32_t i;
-	proto_engine_data_t *engine_data;
+	proto_data_head_t *engine_head;
+    proto_data_t *engine_data;
 
-	engine_data = &proto_conf->engine_data[engine_id];
-	assert(engine_data);
+	engine_head = &proto_conf->engine_head[engine_id];
+	assert(engine_head);
 
-	if (engine_data->lua_type != LUA_TSTRING) {
-		log_error(ptlog_p, "pde data type error:%d\n", engine_data->lua_type);
+	if (engine_head->lua_type != LUA_TSTRING) {
+		log_error(ptlog_p, "pde data type error:%d\n", engine_head->lua_type);
 		return -INVALID_PARAM;
 	} else {
-		pde_str = engine_data->data;
+        assert(engine_head->item_num == 1);
+        engine_data = list_entry(engine_head->list.next, proto_data_t, list);
+		pde_str = engine_data->value;
 		p = pde_str;
 		do {
 			q = strtok(p, ",");

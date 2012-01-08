@@ -123,17 +123,77 @@ uint32_t __read_file(char *filename, char **rd_buf, int init_size, int step)
 	return read_size;
 }
 
-void __get_lua_table_config(lua_State *L, void **data)
+void __proto_data_create_add(const char *key, const char *value, proto_data_head_t *data_head)
+{
+    list_head_t *head = &data_head->list;
+    proto_data_t *data;
+
+    data = zmalloc(proto_data_t *, sizeof(proto_data_t));
+    assert(data);
+
+    if (key != NULL) {
+        data->key = malloc(strlen(key));
+        strcpy(data->key, key);
+    }
+    if (value != NULL) {
+        data->value = malloc(strlen(value));
+        strcpy(data->value, value);
+    }
+    list_add_tail(&data->list, head);
+    data_head->item_num++;
+}
+
+void __proto_data_show(proto_data_head_t *head)
+{
+    list_head_t *list_head, *p;
+    if (head->item_num <= 0) {
+        return;
+    }
+    do {
+        list_head = &head->list;
+        printf("\t\t");
+        list_for_each(p, list_head) {
+            proto_data_t *data = list_entry(p, proto_data_t, list);
+            if (data->key != NULL) {
+                printf("key:%s, ", data->key);
+            }
+            if (data->value != NULL) {
+                printf("value:%s ", data->value);
+            }
+        }
+        printf("\n");
+        head = head->next;
+    } while(head != NULL);
+}
+void __proto_data_free(proto_data_head_t *head)
+{
+    list_head_t *list_head, *temp, *p;
+    proto_data_head_t *next;
+
+    do {
+        list_head = &head->list;
+        list_for_each_safe(p, temp, list_head) {
+            proto_data_t *data = list_entry(p, proto_data_t, list);
+            if (data->key != NULL) {
+                free(data->key);
+            }
+            if (data->value != NULL) {
+                free(data->value);
+            }
+        }
+        next = head->next;
+        free(head);
+        head = next;
+    } while(head != NULL);
+}
+
+void __get_lua_table_config(lua_State *L, proto_data_head_t *head)
 {
     uint32_t table_num, index;
-    lua_data_head_t *head = NULL;
-    lua_conf_data_t *item;
-    const char *tmp;
     uint32_t i;
-    void **pp;
+    proto_data_head_t **pp = NULL;
 
     table_num = lua_objlen(L, -1);
-    pp = data;
 
     for (i=1; i<=table_num; i++) {
         int flag = 1;
@@ -141,28 +201,20 @@ void __get_lua_table_config(lua_State *L, void **data)
         index = lua_gettop(L);
         lua_pushnil(L);
         while (lua_next(L, index) != 0) {
-            if (flag) {
-                head = zmalloc(lua_data_head_t *, sizeof(lua_data_head_t));
+            if (flag && (i != 1)) {
+                head = zmalloc(proto_data_head_t *, sizeof(proto_data_head_t));
                 LIST_HEAD_INIT(&head->list);
                 assert(head);
                 *pp = head;
                 flag = 0;
+            } else if (i == 1) {
+                flag = 0;
             }
             assert(lua_type(L, -1) == LUA_TSTRING);
             assert(lua_type(L, -2) == LUA_TSTRING);
-            item = zmalloc(lua_conf_data_t *, sizeof(lua_conf_data_t));
-            assert(item);
-            tmp = lua_tostring(L, -2);
-            item->key = malloc(strlen(tmp));
-            assert(item->key);
-            strcpy(item->key, tmp);
-            tmp = lua_tostring(L, -1);
-            item->value = malloc(strlen(tmp));
-            assert(item->value);
-            strcpy(item->value, tmp);
-            printf("%s, %s\n", item->key, item->value);
+            __proto_data_create_add(lua_tostring(L, -2), lua_tostring(L, -1), head);
+            head->item_num++;
             lua_pop(L, 1);
-            list_add_tail(&item->list, &head->list);
         }
         lua_pop(L, 1);
         if (flag == 0) {
@@ -183,34 +235,32 @@ int32_t __proto_item_read(lua_State *L, char *proto_name, int index, sf_proto_co
 	assert(p->name);
 	strcpy(p->name, proto_name);
 
-	p->engine_data = zmalloc(proto_engine_data_t *, sizeof(proto_engine_data_t) * conf->total_engine_num);
-	assert(p->engine_data);
+	p->engine_head = zmalloc(proto_data_head_t *, sizeof(proto_data_head_t) * conf->total_engine_num);
+	assert(p->engine_head);
 
 	for (i=0; i<conf->total_engine_num; i++) {
 		type = ldlua_table_item_type(L, proto_name, conf->engines[i].name);
+        LIST_HEAD_INIT(&p->engine_head[i].list);
 		if (type <= 0) {
-			p->engine_data[i].lua_type = -1;
+			p->engine_head[i].lua_type = -1;
 		} else {
-			p->engine_data[i].lua_type = type;
+			p->engine_head[i].lua_type = type;
 			p->engine_mask |= 1<<i;
 		}
 		if (type == LUA_TSTRING) {
 			char *str;
 			str = ldlua_table_key_get_string(L, proto_name, conf->engines[i].name);
 			assert(str && strlen(str) > 0);
-			p->engine_data[i].data = malloc(strlen(str) + 1);
-			assert(p->engine_data[i].data);
-			strcpy(p->engine_data[i].data, str);
+            __proto_data_create_add(NULL, str, &p->engine_head[i]);
 		} else if (type == LUA_TTABLE) {
             ldlua_table_raw_get(L, proto_name);
             lua_getfield(L, -1, conf->engines[i].name);
-            __get_lua_table_config(L, &p->engine_data[i].data);
+            __get_lua_table_config(L, &p->engine_head[i]);
             lua_pop(L, 2); /*balance the stack*/
       }
 	}
 	return 0;
 }
-
 
 sf_proto_conf_t *__proto_conf_read()
 {
@@ -296,9 +346,9 @@ void __proto_conf_show(sf_proto_conf_t *conf)
 	for (i=0; i<conf->total_proto_num; i++) {
 		print("\tname:%s,engine_mask:%d\n", conf->protos[i].name, conf->protos[i].engine_mask);
 		for (j=0; j<conf->total_engine_num; j++) {
-			print("\t\tengine:%s, type:%d, data:%s\n", conf->engines[j].name,
-				  conf->protos[i].engine_data[j].lua_type,
-				  (conf->protos[i].engine_data[j].data == NULL)?"NULL":(char *)conf->protos[i].engine_data[j].data);
+			print("\t\tengine:%s, type:%d\n", conf->engines[j].name,
+				  conf->protos[i].engine_head[j].lua_type);
+            __proto_data_show(&conf->protos[i].engine_head[j]);
 		}
 	}
 }
@@ -323,11 +373,8 @@ void __proto_conf_free(void *data)
 			if (conf->protos[i].name) {
 				free(conf->protos[i].name);
 			}
-			if (conf->protos[i].engine_data) {
-				if (conf->protos[i].engine_data->data) {
-					free(conf->protos[i].engine_data->data);
-				}
-				free(conf->protos[i].engine_data);
+			if (conf->protos[i].engine_head) {
+                __proto_data_free(conf->protos[i].engine_head);
 			}
 		}
 		free(conf->protos);

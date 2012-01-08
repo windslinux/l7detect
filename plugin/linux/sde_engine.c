@@ -53,7 +53,7 @@ typedef struct strbuf_list{
 static int32_t __parse_sde_proto_conf(proto_conf_t *proto_conf,
 									  uint32_t app_id, uint32_t engine_id)
 {
-
+    return 0;
 }
 
 static int32_t __sde_conf_read(sf_proto_conf_t *conf, uint32_t sde_engine_id)
@@ -68,8 +68,7 @@ static int32_t __sde_conf_read(sf_proto_conf_t *conf, uint32_t sde_engine_id)
 		if ((conf->protos[i].engine_mask & (1<<sde_engine_id)) == 0) {
 			continue;
 		}
-		if (__parse_sde_proto_conf(&conf->protos[i], i, sde_engine_id,
-								   sde_table) != 0) {
+		if (__parse_sde_proto_conf(&conf->protos[i], i, sde_engine_id) != 0) {
 			log_error(ptlog_p, "parse protocol [%s] error, system halt\n", conf->protos[i].name);
 			exit(-1);
 		}
@@ -82,7 +81,6 @@ static int32_t sde_engine_init_global(module_info_t *this)
 	sf_proto_conf_t *conf = (sf_proto_conf_t *)this->pub_rep;
 	info_global_t *info;
 	int32_t status;
-	uint32_t i, j;
 
 	info = zmalloc(info_global_t *, sizeof(info_global_t));
 	assert(info);
@@ -93,7 +91,7 @@ static int32_t sde_engine_init_global(module_info_t *this)
 	info->sde_engine_id = engine_id_get(conf, "sde");
 	assert(info->sde_engine_id != INVALID_ENGINE_ID);
 
-   	status = __sde_conf_read(conf, info->sde_engine_id, info->sde_table);
+   	status = __sde_conf_read(conf, info->sde_engine_id);
 	assert(status == 0);
 
 	this->pub_rep = (info_global_t *)info;
@@ -102,12 +100,12 @@ static int32_t sde_engine_init_global(module_info_t *this)
 
 static int32_t sde_engine_process(module_info_t *this, void *data)
 {
+    return 0;
 }
 
 static int32_t sde_engine_fini_global(module_info_t *this)
 {
 	info_global_t *info;
-	uint32_t i, j;
 
 	info = (info_global_t *)this->pub_rep;
 
