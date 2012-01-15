@@ -13,6 +13,10 @@
 #define INVALID_ENGINE_ID 65535
 #define INVALID_PROTO_ID 65535
 
+#define SDE_PAT_TOKEN   '|'
+#define SDE_KEY_TOKEN   '|'
+#define SDE_KEY_RANGE_TOKEN '~'
+#define SDE_KEY_MAX_LEN 20
 enum {
 	MODE_NOT_SET,
 	MODE_LIVE,

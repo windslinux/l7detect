@@ -212,8 +212,8 @@ void __get_lua_table_config(lua_State *L, proto_data_head_t *head)
             }
             assert(lua_type(L, -1) == LUA_TSTRING);
             assert(lua_type(L, -2) == LUA_TSTRING);
+            printf("add key %s, value %s\n", lua_tostring(L, -2), lua_tostring(L, -1));
             __proto_data_create_add(lua_tostring(L, -2), lua_tostring(L, -1), head);
-            head->item_num++;
             lua_pop(L, 1);
         }
         lua_pop(L, 1);
