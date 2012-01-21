@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <ctype.h>
 #include "common.h"
 #include "decap.h"
 #include "plugin.h"
@@ -27,12 +28,16 @@ typedef struct {
     int16_t min;
     int32_t max;
 } range_t;
+
 typedef struct {
-    range_t *ranges;
     uint32_t range_num;
+    range_t *ranges;
 } range_head_t;
 
-
+typedef struct pattern_head {
+    uint32_t len;
+    uint8_t *value;
+} pattern_head_t;
 module_ops_t sde_engine_ops = {
 	.init_global = sde_engine_init_global,
     .init_local = NULL,
@@ -61,6 +66,128 @@ typedef struct strbuf_list{
     key_offset_t value;
 } strbuf_list_t;
 
+enum {
+    HEX_MODE,
+    STRING_MODE,
+    SHIFT_MODE,
+};
+
+#define __change_mode(cur) do {    \
+    mode = cur;                         \
+} while(0)
+
+#define __change_mode_clr(cur) do {    \
+    mode = cur;                            \
+    j = 0;                                  \
+} while(0)
+
+#define PROCESS do {                                                \
+    if ((status = __handle_pattern_buf(p, buf, &j, mode)) < 0) {      \
+        FAIL;                                                       \
+    } else {                                                        \
+        p += status;                                                \
+    }                                                               \
+} while (0)
+
+#define FAIL    do {                                            \
+    printf("src=%s, pos %d, status %d\n", src, i+1, status);      \
+    return -1;                                                  \
+} while(0)
+
+static int __handle_pattern_buf(unsigned char *p, char *buf, uint32_t *j, int mode)
+{
+    if (*j <= 0) {
+        return 0;
+    }
+    if (mode == HEX_MODE) {
+        if (*j == 2) {
+            *j = 0;
+            if (isxdigit(buf[0]) && isxdigit(buf[1])) {
+                unsigned long int value;
+                value = strtoull(buf, NULL, 16);
+                *p = (value) & 0xff;
+                if (errno) {
+                    return errno;
+                } else {
+                    return 1;
+                }
+            } else {
+                return -INVALID_PARAM;
+            }
+        } else {
+            return 0;
+        }
+    }
+    if (mode >= STRING_MODE) {
+        if (*j != 1) {
+            return -HANDLE_INCOMPLETE;
+        } else {
+            *p = *buf;
+            *j = 0;
+            return 1;
+        }
+    }
+    return -UNKNOWN_ERROR;
+}
+
+static int __change_format_to_dst(unsigned char *dst, char *src, uint32_t *n)
+{
+    unsigned char *p;
+    char buf[3];
+    uint32_t i, j, mode;
+    int32_t status;
+
+    mode = HEX_MODE;
+    buf[2] = '\0';
+    for (i=0, j=0, p=dst; i<strlen(src); i++) {
+        buf[j++] = src[i];
+        switch(mode) {
+           case HEX_MODE:
+                {
+                    if (isxdigit(src[i])) {
+                        PROCESS;
+                    } else if (src[i] == '(') {
+                        j--;
+                        PROCESS;
+                        __change_mode(STRING_MODE);
+                    } else {
+                        status = -10;
+                        FAIL;
+                    }
+                }
+                break;
+            case STRING_MODE:
+                {
+                    if (src[i] == '\\') {
+                        j--;
+                        __change_mode(SHIFT_MODE);
+                    } else if (src[i] == ')') {
+                        j--;
+                        __change_mode(HEX_MODE);
+                    } else {
+                        PROCESS;
+                    }
+                }
+                break;
+            case SHIFT_MODE:
+                {
+                    PROCESS;
+                    __change_mode_clr(STRING_MODE);
+                }
+                break;
+            default:
+                break;
+       }
+    }
+    if (j!= 0) {
+        j--;
+        status = -HANDLE_INCOMPLETE;
+        FAIL;
+    }
+    *n = p - dst;
+    return 0;
+}
+
 static void __get_next_value_from_rule(char *key, char **pp)
 {
     char *p = *pp;
@@ -77,11 +204,13 @@ static void __get_next_value_from_rule(char *key, char **pp)
                 start++;
             }
             if (*start == '\0') {
+                free(p);
                 *pp = NULL;
                 return;
             }
         } else {
 			log_error(ptlog_p, "Fatal Error, quit\n");
+            free(p);
             *pp = NULL;
             return;
         }
@@ -119,6 +248,9 @@ static void __fetch_sde_key(proto_data_t *data, list_head_t *head, range_head_t 
         while (p != NULL) {
             p = strchr(p, SDE_KEY_TOKEN);
             count++;
+            if (p != NULL) {
+                p++;
+            }
         }
         range_hd[j].ranges = zmalloc(range_t *, sizeof(range_t) * count);
         assert(range_hd);
@@ -135,7 +267,6 @@ static void __fetch_sde_key(proto_data_t *data, list_head_t *head, range_head_t 
             }
             memcpy(buf, last, len);
             buf[len] = '\0';
-
             q = strchr(buf, SDE_KEY_RANGE_TOKEN);
             if (q != NULL) {
                 *q = '\0';
@@ -163,17 +294,41 @@ static void __fetch_sde_key(proto_data_t *data, list_head_t *head, range_head_t 
     }
 }
 
-static void __handle_sde_string(proto_data_t *data, list_head_t *head, char **pp, uint32_t current, uint32_t total_num)
+static void __handle_sde_rule(range_head_t *range_hd, char **pp, uint32_t total_num)
+{
+    uint32_t i, j;
+    pattern_head_t *pattern_hd;
+
+    pattern_hd = zmalloc(pattern_head_t *, sizeof(pattern_head_t) * total_num);
+    assert(pattern_hd);
+
+    for (i=0; i<total_num; i++) {
+        pattern_hd[i].value = zmalloc(uint8_t *, strlen(pp[i]));
+        assert(pattern_hd[i].value);
+        assert(__change_format_to_dst((unsigned char *)pattern_hd[i].value, pp[i], &pattern_hd[i].len) == 0);
+
+        for (j=0; j<pattern_hd[i].len; j++) {
+            if (isprint(pattern_hd[i].value[j])) {
+                printf("%c", pattern_hd[i].value[j]);
+            } else {
+                printf(" 0x%02x ", (unsigned char)pattern_hd[i].value[j]);
+            }
+        }
+    }
+
+    printf("\n");
+
+    //__sde_table_add(range_hd, pattern_hd, total_num);
+}
+
+static void __handle_sde_string(proto_data_t *data, list_head_t *head, char **pp, range_head_t *range_hd,
+                                uint32_t current, uint32_t total_num)
 {
     proto_data_t *next;
-    uint32_t i;
 
     if (current >= total_num) {
-        for (i=0; i<total_num; i++) {
-            printf("%s ", pp[i]);
-        }
-        printf("\n");
-    } else {
+        __handle_sde_rule(range_hd, pp, total_num);
+   } else {
         if (pp[current] != NULL) {
             free(pp[current]);
             pp[current] = NULL;
@@ -181,7 +336,7 @@ static void __handle_sde_string(proto_data_t *data, list_head_t *head, char **pp
         __get_next_value_from_rule(data->value, &pp[current]);
        do {
             next = list_entry(data->list.next, proto_data_t, list);
-            __handle_sde_string(next, head, pp, current+1, total_num);
+            __handle_sde_string(next, head, pp, range_hd, current+1, total_num);
             __get_next_value_from_rule(data->value, &pp[current]);
         } while (pp[current] != NULL);
     }
@@ -213,7 +368,7 @@ static int32_t __parse_sde_proto_conf(proto_data_head_t *head)
                     printf("min=%d, max=%d\n", range_hd[i].ranges[j].min, range_hd[i].ranges[j].max);
                 }
             }
-            __handle_sde_string(data, &p->list, pp, 0, p->item_num);
+            __handle_sde_string(data, &p->list, pp, range_hd, 0, p->item_num);
 
             for (i=0; i<p->item_num; i++) {
                 if (pp[i] != NULL) {

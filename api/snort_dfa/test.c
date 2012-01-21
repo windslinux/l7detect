@@ -21,10 +21,10 @@ int match_back(void* id, void * tree, int index, void *data, void *neg_list)
 int main()
 {
 	int pattern_id = 0;
-	char pattern[] = {'1', '1'};
+	char pattern[] = {0x00, 0x03};
 	char *pattern2 = "zhou";
 
-	char *content = "11xxxzhouttxxxxx11";
+	char content[] = {0x01, 0x02, 0x00, 0x03, 0x05};
 	int mpse_id = 0;
 	int result;
 
@@ -35,7 +35,7 @@ int main()
 	printf("add result %d\n", result);
 	search_api->search_prep(mpse_id);
 	printf("compile result %d\n", result);
-	result = search_api->search_find(mpse_id, content, strlen(content), 0, match_back);
+	result = search_api->search_find(mpse_id, content, sizeof(content), 0, match_back);
 	printf("find result %d\n", result);
 	return 0;
 }
