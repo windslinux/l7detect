@@ -31,6 +31,15 @@ int ldlua_table_item_type(lua_State *L, char *table_name, char *item_name)
 	return type;
 }
 
+int ldlua_has_table(lua_State *L, char *table_name)
+{
+	int res;
+    lua_getglobal(L, table_name);
+    res = lua_istable(L, -1);
+    lua_pop(L, 1);
+	return res;
+}
+
 char* ldlua_table_key_get_string(lua_State *L, char *table_name, char *key)
 {
 	char *p = NULL;

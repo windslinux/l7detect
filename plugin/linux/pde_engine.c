@@ -64,8 +64,8 @@ static int32_t __parse_pde_proto_conf(proto_conf_t *proto_conf,
 	char *pde_str, *p, *q;
 	uint16_t proto, port;
 	int32_t i;
-	proto_data_head_t *engine_head;
-    proto_data_t *engine_data;
+	common_data_head_t *engine_head;
+    common_data_t *engine_data;
 
 	engine_head = &proto_conf->engine_head[engine_id];
 	assert(engine_head);
@@ -75,7 +75,7 @@ static int32_t __parse_pde_proto_conf(proto_conf_t *proto_conf,
 		return -INVALID_PARAM;
 	} else {
         assert(engine_head->item_num == 1);
-        engine_data = list_entry(engine_head->list.next, proto_data_t, list);
+        engine_data = list_entry(engine_head->list.next, common_data_t, list);
 		pde_str = engine_data->value;
 		p = pde_str;
 		do {

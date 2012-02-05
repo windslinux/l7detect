@@ -95,6 +95,7 @@ char* ldlua_table_key_get_string(lua_State *L, char *table_name, char *key);
 int ldlua_table_key_get_num(lua_State *L, char *table_name, char *key);
 int ldlua_table_raw_get_number(lua_State *L, char *table_name, int index);
 int ldlua_table_item_type(lua_State *L, char *table_name, char *key);
+int ldlua_has_table(lua_State *L, char *table_name);
 
 #define ldlua_table_item_exist(L, table_name, item_name) (	\
 		ldlua_table_item_type(L, table_name, item_name) > 0? TRUE:FALSE) \

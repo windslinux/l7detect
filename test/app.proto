@@ -5,6 +5,12 @@ proto_list={"qq_talk", "ppstream", "qqlive", "http", "dns", "ssl", "nat",
 engine_list={"pde", "sde", "lde"}
 pkb_dir = {up=1, down=2}
 
+sde={}
+sde.conf = {
+                {"0~7", "-7~-1"},
+                {"all"},
+           }
+
 qq_talk = {}
 qq_talk.pde="udp/8000,tcp/8000,tcp/14000"
 qq_talk.sde={

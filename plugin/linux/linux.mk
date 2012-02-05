@@ -10,6 +10,7 @@ pde_engine.so-FLAGS := -fPIC
 
 sde_engine.so-OBJS := sde_engine.o engine_comm.o
 sde_engine.so-FLAGS := -fPIC
+sde_engine.so-LDFLAG := -lsnort_dfa
 
 lde_engine.so-OBJS := lde_engine.o ldlua_register.o ldlua_pkb.o engine_comm.o ldlua_session.o
 lde_engine.so-FLAGS := -I L$(LIBLUA_DIR)/include -fPIC

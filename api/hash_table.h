@@ -11,10 +11,9 @@ enum rwlock_type{
 };
 
 typedef union hash_table_lock{
-	void *ptr;
-	mutex_t *mutexlock;
-	spinlock_t *spinlock;
-	rwlock_t *rwlock;
+	mutex_t mutexlock;
+	spinlock_t spinlock;
+	rwlock_t rwlock;
 } hash_table_lock_t;
 
 typedef struct hash_node {
@@ -25,7 +24,7 @@ typedef struct hash_node {
 typedef struct hash_table_hd {
 	uint32_t bucket_num;
 	uint32_t lock_type;
-	hash_table_lock_t lock;
+	hash_table_lock_t *lock;
 	list_head_t head[0];
 } hash_table_hd_t;
 

@@ -45,6 +45,8 @@ dirstack_$(sp)  :=  $(d)
 d               :=  $(dir)
 
 #  component specification
+d   :=  $(dirstack_$(sp))
+sp  :=  $(basename $(sp))
 
 dir = $(d)/snort_dfa
 include $(dir)/snort_dfa.mk
@@ -55,5 +57,4 @@ d   :=  $(dirstack_$(sp))
 sp  :=  $(basename $(sp))
 
 
-d   :=  $(dirstack_$(sp))
-sp  :=  $(basename $(sp))
+

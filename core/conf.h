@@ -12,6 +12,8 @@
 
 #define INVALID_ENGINE_ID 65535
 #define INVALID_PROTO_ID 65535
+#define MAX_SDE_GRAPH_RANGE  16
+#define DFA_PATTERN_RANGE_TOKEN '~'
 
 #define SDE_PAT_TOKEN   '|'
 #define SDE_KEY_TOKEN   '|'
@@ -24,6 +26,19 @@ enum {
     MODE_SE,
 };
 
+typedef struct common_data {
+    list_head_t list;
+    char *key;
+    char *value;
+} common_data_t;
+
+typedef struct common_data_head {
+	int16_t lua_type;
+    uint16_t item_num;
+    struct common_data_head *next;
+    list_head_t list;
+} common_data_head_t;
+
 typedef struct session_conf {
 	uint32_t bucket_num;
 	uint32_t session_expire_time;
@@ -31,27 +46,15 @@ typedef struct session_conf {
 	char *session_logname;
 } session_conf_t;
 
-typedef struct proto_data {
-    list_head_t list;
-    char *key;
-    char *value;
-} proto_data_t;
-
-typedef struct proto_data_head {
-	int16_t lua_type;
-    uint16_t item_num;
-    struct proto_data_head *next;
-    list_head_t list;
-} proto_data_head_t;
-
 typedef struct proto_conf {
 	char *name;
 	uint32_t engine_mask;
-	proto_data_head_t *engine_head;
+	common_data_head_t *engine_head;
 } proto_conf_t;
 
 typedef struct detect_engine {
 	char name[ENGINE_NAME_LEN];
+    common_data_head_t conf;
 } detect_engine_t;
 
 typedef struct sf_proto_conf {
