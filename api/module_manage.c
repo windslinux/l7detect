@@ -296,7 +296,7 @@ int32_t module_list_fini_local(module_hd_t *head_p, uint32_t thread_id)
 		if (modules != NULL) {
 			valid = head_p->module_valid;
 			for (i=(int)valid; i>=1; i--) {
-			//log_notice(syslog_p, "fini module local %s on thread %d\n", modules[i].name, thread_id);
+			log_notice(syslog_p, "fini module local %s on thread %d\n", modules[i].name, thread_id);
 				if ((modules[i].ops != NULL) && (modules[i].ops->fini_local != NULL)) {
 					modules[i].flags |= MODULE_QUIT;
 					status = modules[i].ops->fini_local(&modules[i], thread_id);

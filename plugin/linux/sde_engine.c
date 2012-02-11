@@ -85,13 +85,9 @@ enum {
     SHIFT_MODE,
 };
 
-typedef struct pattern_info {
-    pattern_head_t *pat_head;
-    range_head_t *range_head;
-} pattern_info_t;
-
 typedef struct hash_pstr_info {
-    pattern_info_t item;
+    pattern_head_t pat_head;
+    range_head_t range_head;
 } hash_pstr_info_t;
 
 typedef struct hash_tid2rid_info {
@@ -111,7 +107,7 @@ typedef struct dfa_graph_info {
     uint32_t pattern_range_num;
     dfa_pattern_range_t *pattern_ranges;
     void *dfa_instance;
-    range_head_t *pid2tid_array;
+    range_head_t **pid2tid_array;
 } dfa_graph_info_t;
 
 typedef struct info_global {
@@ -299,7 +295,7 @@ static void __fetch_sde_key(common_data_t *data, list_head_t *head, range_head_t
 
     j = 0;
     while(1) {
-        count = 0;
+        count = 1;
         p = data->key;
         while (p != NULL) {
             p = strchr(p, SDE_KEY_TOKEN);
@@ -309,7 +305,7 @@ static void __fetch_sde_key(common_data_t *data, list_head_t *head, range_head_t
             }
         }
         range_hd[j].ranges = zmalloc(range_t *, sizeof(range_t) * count);
-        assert(range_hd);
+        assert(range_hd[j].ranges);
         i = 0;
         p = data->key;
         while (p != NULL) {
@@ -352,19 +348,20 @@ static void __fetch_sde_key(common_data_t *data, list_head_t *head, range_head_t
 
 static int32_t pid2tid_array_create(dfa_graph_info_t *graph_info)
 {
-    graph_info->pid2tid_array = zmalloc(range_head_t *, sizeof(range_head_t) * PID_ARRAY_INIT_NUM);
+    graph_info->pid2tid_array = zmalloc(range_head_t **, sizeof(range_head_t *) * PID_ARRAY_INIT_NUM);
     assert(graph_info->pid2tid_array);
     graph_info->pid_num = PID_ARRAY_INIT_NUM;
+    printf("pid2tid_array=%p, size=%llu\n", graph_info->pid2tid_array,
+            (unsigned long long)sizeof(range_head_t *) * PID_ARRAY_INIT_NUM);
     return 0;
 }
 
-static int32_t pid2tid_array_insert(dfa_graph_info_t *graph_info, range_t *range)
+static int32_t pid2tid_array_insert(dfa_graph_info_t *graph_info, range_head_t *range_hd)
 {
-    range_head_t *range_head;
-
+    //printf("current_id=%d, pid_num=%d\n", graph_info->current_pid, graph_info->pid_num);
     if (graph_info->current_pid >= graph_info->pid_num) {
-        range_head_t *array;
-        array = realloc(graph_info->pid2tid_array, sizeof(range_head_t) * (graph_info->pid_num + PID_ARRAY_INCR_STEP));
+        range_head_t **array;
+        array = realloc(graph_info->pid2tid_array, sizeof(range_head_t *) * (graph_info->pid_num + PID_ARRAY_INCR_STEP));
         if (array == NULL) {
             return -NO_SPACE_ERROR;
         } else {
@@ -372,10 +369,9 @@ static int32_t pid2tid_array_insert(dfa_graph_info_t *graph_info, range_t *range
         }
         graph_info->pid2tid_array = array;
     }
-    range_head = &graph_info->pid2tid_array[graph_info->current_pid];
-    range_head->ranges = realloc(range_head->ranges, sizeof(range_t) * range_head->range_num);
-    memcpy(&range_head->ranges[range_head->range_num], range, sizeof(range_t));
-    assert(range_head);
+    //printf("pid2tid_array=%p, write mem=%p\n", graph_info->pid2tid_array,
+      //      &graph_info->pid2tid_array[graph_info->current_pid]);
+    graph_info->pid2tid_array[graph_info->current_pid] = range_hd;
     return 0;
 }
 
@@ -407,14 +403,7 @@ static int32_t pid2tid_array_search(dfa_graph_info_t *graph_info, match_result_t
 
 static void pid2tid_array_destroy(dfa_graph_info_t *graph_info)
 {
-    uint32_t i;
     if (graph_info->pid2tid_array) {
-        for (i=0; i<graph_info->pid_num; i++) {
-            range_head_t *range_hd = &graph_info->pid2tid_array[i];
-            if (range_hd->ranges != NULL) {
-                free(range_hd->ranges);
-            }
-        }
         free(graph_info->pid2tid_array);
     }
 }
@@ -433,7 +422,7 @@ static inline uint32_t __pstr_table_hash(pattern_head_t *pattern_hd)
     for (i=0; i<pattern_hd->len; i++) {
         hash += str[i] * seed[i%seed_num];
     }
-    hash = hash << 24;
+    hash = hash << 8;
     hash = ((pattern_hd->len & 0xff) | hash) & PSTR_TABLE_BUCKET_NUM;
     return hash;
 }
@@ -442,8 +431,7 @@ static int32_t __pstr_item_compare(void *this, void *user_data, void *table_item
 {
     hash_pstr_info_t *table_node;
     table_node = (hash_pstr_info_t *)table_item;
-
-    return (memcmp(table_node->item.pat_head, user_data, sizeof(pattern_head_t)));
+    return (memcmp(&table_node->pat_head, user_data, sizeof(pattern_head_t)));
 }
 
 static hash_table_hd_t *pstr_table_create()
@@ -454,38 +442,42 @@ static hash_table_hd_t *pstr_table_create()
 static void * pstr_table_search(hash_table_hd_t *hd, pattern_head_t *pat)
 {
     uint32_t hash = __pstr_table_hash(pat);
-
     return hash_table_search(hd, hash, NULL, __pstr_item_compare, NULL, pat);
 }
 
-static int32_t pstr_item_insert_range(range_head_t *table_range, range_t *range,
+static int32_t pstr_item_insert_ranges(hash_pstr_info_t *node, range_head_t *range_hd,
                                     uint32_t *current_tid)
 {
-    range_t *ranges = table_range->ranges;
-    ranges = realloc(ranges, table_range->range_num + 1);
+    uint32_t i;
+    range_head_t *table_range_hd;
+    range_t *ranges;
+
+    table_range_hd = &node->range_head;
+    ranges = table_range_hd->ranges;
+    ranges = realloc(ranges,
+            (table_range_hd->range_num + range_hd->range_num) * sizeof(range_t));
     if (ranges == NULL) {
         return -NO_SPACE_ERROR;
     }
-    memcpy(&ranges[table_range->range_num], range, sizeof(range_t));
-    ranges->tid = *current_tid++;
-    table_range->range_num++;
-    table_range->ranges = ranges;
+    for (i=0; i<range_hd->range_num; i++) {
+        range_hd->ranges[i].tid = *current_tid;
+    }
+    memcpy(&ranges[table_range_hd->range_num], range_hd->ranges, sizeof(range_t) * range_hd->range_num);
+    (*current_tid)++;
+    table_range_hd->range_num += range_hd->range_num;
+    table_range_hd->ranges = ranges;
+
     return 0;
 }
 
-static hash_pstr_info_t *pstr_table_insert(hash_table_hd_t *hd, pattern_head_t *pat_head)
+static hash_pstr_info_t *pstr_table_create_insert_pattern(hash_table_hd_t *hd, pattern_head_t *pat_head)
 {
     hash_pstr_info_t *node;
 
     node = zmalloc(hash_pstr_info_t *, sizeof(hash_pstr_info_t));
     assert(node);
 
-    node->item.pat_head = zmalloc(pattern_head_t *, sizeof(pattern_head_t));
-    assert(node->item.pat_head);
-    memcpy(node->item.pat_head, &pat_head, sizeof(pattern_head_t));
-
-    node->item.range_head = zmalloc(range_head_t *, sizeof(range_head_t));
-    assert(node->item.range_head);
+    memcpy(&node->pat_head, pat_head, sizeof(pattern_head_t));
 
     assert(hash_table_insert(hd, __pstr_table_hash(pat_head), node) == 0);
     return node;
@@ -499,11 +491,11 @@ static void pstr_table_destroy(hash_table_hd_t *hd)
     hash_pstr_info_t *info;
     for (i=0; i<hd->bucket_num; i++) {
         hash_table_one_bucket_for_each(hd, i, info) {
-            if (info->item.pat_head) {
-                free(info->item.pat_head);
+            if(info->pat_head.value) {
+                free(info->pat_head.value);
             }
-            if (info->item.range_head) {
-                free(info->item.range_head);
+            if (info->range_head.ranges) {
+                free(info->range_head.ranges);
             }
             if ((status = hash_table_remove(hd, i, info)) != 0) {
                 log_error(ptlog_p, "hash_table_remove error, status %d\n", status);
@@ -513,7 +505,7 @@ static void pstr_table_destroy(hash_table_hd_t *hd)
     }
 }
 
-static uint32_t pstr_get_graph_id(pattern_head_t *pat_head, range_t *range)
+static uint32_t pstr_get_graph_id(pattern_head_t *pat_head, range_head_t *range)
 {
     return 0;
 }
@@ -617,21 +609,20 @@ static void tid2rid_table_destroy(hash_table_hd_t *hd)
     }
 }
 
-static void __handle_sde_rule(module_info_t *this, uint32_t proto_id, range_head_t *range_hd, char **pp, uint32_t total_num)
+static void __handle_sde_rule(info_global_t *gp, uint32_t proto_id, range_head_t *range_hd, char **pp, uint32_t total_num)
 {
-    uint32_t i, j, k, found;
+    uint32_t i, k, found;
     uint32_t *tid_record;
     uint32_t record = 0;
     int32_t status;
     int32_t new_node;
-
+    uint32_t table_range_num, graph_id;
     pattern_head_t pattern_hd;
-    info_global_t *gp = (info_global_t *)this->pub_rep;
     hash_pstr_info_t *node;
 
     assert(range_hd->range_num > 0);
 
-    tid_record = zmalloc(uint32_t *, total_num * range_hd->range_num);
+    tid_record = zmalloc(uint32_t *, sizeof(uint32_t) * total_num);
     assert(tid_record);
 
     for (i=0; i<total_num; i++) {
@@ -641,47 +632,49 @@ static void __handle_sde_rule(module_info_t *this, uint32_t proto_id, range_head
         assert(__change_format_to_dst((unsigned char *)pattern_hd.value, pp[i], &pattern_hd.len) == 0);
         node = pstr_table_search(gp->pstr_hd, &pattern_hd);
         if (node == NULL) {
-            node = pstr_table_insert(gp->pstr_hd, &pattern_hd);
+            node = pstr_table_create_insert_pattern(gp->pstr_hd, &pattern_hd);
             assert(node);
             new_node = 1;
-        }
-        range_head_t *table_range = node->item.range_head;
-        assert(table_range);
-        for (j=0; j<range_hd->range_num; j++) {
-            uint32_t table_range_num = table_range->range_num;
-            found = 0;
-            for (k=0; k<table_range_num; k++) {
-                if ((table_range->ranges[k].min == range_hd->ranges[j].min) &&
-                    (table_range->ranges[k].max == range_hd->ranges[j].max)) {
-                    /*找到一样的pattern，处理结束，处理下一个pattern*/
-                    found = 1;
-                    tid_record[record++] = table_range->ranges[k].tid;
-                    break;
+        } else {
+            range_head_t *table_range = &node->range_head;
+            assert(table_range);
+            table_range_num = table_range->range_num;
+            found = 1;
+            if (table_range_num >= range_hd[i].range_num) {
+                for (k=0; k<table_range_num; k++) {
+                    if (!((table_range->ranges[k].min == range_hd[i].ranges[k].min) &&
+                        (table_range->ranges[k].max == range_hd[i].ranges[k].max))) {
+                        /*找到一样的pattern，处理结束，处理下一个pattern*/
+                        found = 0;
+                        break;
+                    } else if (k+1 >= range_hd[i].range_num) {
+                        break;
+                    }
+                }
+                if (found) {
+                    tid_record[record++] = table_range->ranges[0].tid; /*这个可能会导致漏匹配*/
+                    continue;
                 }
             }
-            if (found) {
-                continue;
-            } else {
-                uint32_t graph_id = pstr_get_graph_id(&pattern_hd, &range_hd->ranges[j]);
-                dfa_graph_info_t *graph_info = &gp->graph_info[graph_id];
-                if (new_node && j == 0) {
-                    /*这是一个新的pattern，要加入图*/
-                    search_api->search_instance_add(graph_info->dfa_instance, (const char *)pattern_hd.value,
+        }
+        /*没找到范围，那么插入新的tid*/
+        graph_id = pstr_get_graph_id(&pattern_hd, &range_hd[i]);
+        dfa_graph_info_t *graph_info = &gp->graph_info[graph_id];
+        if (new_node) {
+            search_api->search_instance_add(graph_info->dfa_instance, (const char *)pattern_hd.value,
                             (int)pattern_hd.len, graph_info->current_pid);
-                    graph_info->current_pid++;
-                }
-                /*插入范围，更新tid*/
-                assert(pstr_item_insert_range(table_range, &range_hd->ranges[j],
-                                            &gp->current_tid) == 0);
-                pid2tid_array_insert(graph_info, &range_hd->ranges[j]);
-                tid_record[record++] = gp->current_tid - 1;
-            }
+            graph_info->current_pid++;
         }
+        assert(pstr_item_insert_ranges(node, &range_hd[i],
+                                            &gp->current_tid) == 0);
+
+        pid2tid_array_insert(graph_info, &node->range_head);
+
+        tid_record[record++] = gp->current_tid - 1;
         if (!new_node) {
             free(pattern_hd.value);
         }
     }
-
     /*update mapping table*/
     //printf("\n");
     if (tid2rid_table_search_tid(gp->tid2rid_hd, tid_record, record) == 0) {
@@ -693,14 +686,15 @@ static void __handle_sde_rule(module_info_t *this, uint32_t proto_id, range_head
     }
 }
 
-static void __handle_sde_string(module_info_t *this, uint32_t proto_id, common_data_t *data, list_head_t *head,
+static void __handle_sde_string(info_global_t *gp, uint32_t proto_id, common_data_t *data,
+                                list_head_t *head,
                                 char **pp, range_head_t *range_hd,
                                 uint32_t current, uint32_t total_num)
 {
     common_data_t *next;
 
     if (current >= total_num) {
-        __handle_sde_rule(this, proto_id, range_hd, pp, total_num);
+        __handle_sde_rule(gp, proto_id, range_hd, pp, total_num);
    } else {
         if (pp[current] != NULL) {
             free(pp[current]);
@@ -709,13 +703,13 @@ static void __handle_sde_string(module_info_t *this, uint32_t proto_id, common_d
         __get_next_value_from_rule(data->value, &pp[current]);
        do {
             next = list_entry(data->list.next, common_data_t, list);
-            __handle_sde_string(this, proto_id, next, head, pp, range_hd, current+1, total_num);
+            __handle_sde_string(gp, proto_id, next, head, pp, range_hd, current+1, total_num);
             __get_next_value_from_rule(data->value, &pp[current]);
         } while (pp[current] != NULL);
     }
 }
 
-static int32_t __parse_sde_proto_conf(module_info_t *this, uint32_t proto_id, common_data_head_t *head)
+static int32_t __parse_sde_proto_conf(info_global_t *gp, uint32_t proto_id, common_data_head_t *head)
 {
     common_data_head_t *p;
     common_data_t *data;
@@ -741,24 +735,24 @@ static int32_t __parse_sde_proto_conf(module_info_t *this, uint32_t proto_id, co
                     printf("min=%d, max=%d\n", range_hd[i].ranges[j].min, range_hd[i].ranges[j].max);
                 }
             }
-            __handle_sde_string(this, proto_id, data, &p->list, pp, range_hd, 0, p->item_num);
+            __handle_sde_string(gp, proto_id, data, &p->list, pp, range_hd, 0, p->item_num);
 
+            for (i=0; i<p->item_num; i++) {
+                free(range_hd[i].ranges);
+            }
+            free(range_hd);
             for (i=0; i<p->item_num; i++) {
                 if (pp[i] != NULL) {
                     free(pp[i]);
                 }
-                if (range_hd[i].ranges != NULL) {
-                    free(range_hd[i].ranges);
-                }
             }
             free(pp);
-            free(range_hd);
         }
     }
     return 0;
 }
 
-static int32_t __sde_conf_read(module_info_t *this, sf_proto_conf_t *conf, uint32_t sde_engine_id)
+static int32_t __sde_conf_read(info_global_t *gp, sf_proto_conf_t *conf, uint32_t sde_engine_id)
 {
 	uint32_t i;
 	proto_conf_t *protos = conf->protos;
@@ -769,7 +763,7 @@ static int32_t __sde_conf_read(module_info_t *this, sf_proto_conf_t *conf, uint3
 		if ((conf->protos[i].engine_mask & (1<<sde_engine_id)) == 0) {
 			continue;
 		}
-		if (__parse_sde_proto_conf(this, i, &conf->protos[i].engine_head[sde_engine_id]) != 0) {
+		if (__parse_sde_proto_conf(gp, i, &conf->protos[i].engine_head[sde_engine_id]) != 0) {
 			log_error(ptlog_p, "parse protocol [%s] error, system halt\n", conf->protos[i].name);
 			exit(-1);
 		}
@@ -781,7 +775,7 @@ static int32_t sde_engine_init_global(module_info_t *this)
 {
 	sf_proto_conf_t *conf = (sf_proto_conf_t *)this->pub_rep;
 	info_global_t *info;
-    common_data_head_t *head_p;
+    common_data_head_t *head_p, *hd_p;
 	int32_t status;
     uint32_t i, j, graph_num = 0;
 
@@ -808,17 +802,18 @@ static int32_t sde_engine_init_global(module_info_t *this)
     }
 
     assert(i<conf->total_engine_num);
-    head_p = &conf->engines[i].conf;
-    while(head_p) {
+    head_p = conf->engines[i].conf;
+    hd_p = head_p;
+    while(hd_p) {
         graph_num++;
-        head_p = head_p->next;
+        hd_p = hd_p->next;
     }
-    info->graph_info = zmalloc(dfa_graph_info_t *, sizeof(dfa_graph_info_t *) * graph_num);
+    info->graph_info = zmalloc(dfa_graph_info_t *, sizeof(dfa_graph_info_t ) * graph_num);
     assert(info->graph_info);
 
     info->graph_num = graph_num;
 
-    for (i=0, head_p=&conf->engines[i].conf; head_p != NULL; head_p = head_p->next, i++) {
+    for (i=0, hd_p = head_p; hd_p != NULL; hd_p = hd_p->next, i++) {
         common_data_t *data;
         list_head_t *p;
         dfa_graph_info_t *graph_info;
@@ -829,12 +824,12 @@ static int32_t sde_engine_init_global(module_info_t *this)
         assert(status == 0);
         graph_info->dfa_instance = search_api->search_instance_new();
         assert(graph_info->dfa_instance);
-        graph_info->pattern_range_num = head_p->item_num;
+        graph_info->pattern_range_num = hd_p->item_num;
         graph_info->pattern_ranges = zmalloc(dfa_pattern_range_t *,
-                                            sizeof(dfa_pattern_range_t) * head_p->item_num);
+                                            sizeof(dfa_pattern_range_t) * hd_p->item_num);
         assert(graph_info->pattern_ranges);
         j = 0;
-        list_for_each(p, &head_p->list) {
+        list_for_each(p, &hd_p->list) {
             data = list_entry(p, common_data_t, list);
             assert(data->value);
             if (strcmp(data->value, "all") == 0) {
@@ -856,12 +851,15 @@ static int32_t sde_engine_init_global(module_info_t *this)
                 assert(errno == 0);
                 *cp = tmp;
             }
+            printf("graph_min %d, max %d\n", graph_info->pattern_ranges[j].min,
+                    graph_info->pattern_ranges[j].max);
         }
     }
 
-	status = __sde_conf_read(this, conf, info->sde_engine_id);
+	status = __sde_conf_read(info, conf, info->sde_engine_id);
 	assert(status == 0);
 
+    printf("graph num is %d\n", (int)graph_num);
     for (i=0; i<graph_num; i++) {
         search_api->search_instance_prep(info->graph_info[i].dfa_instance);
     }
@@ -888,6 +886,7 @@ static int32_t sde_engine_init_local(module_info_t *this, uint32_t thread_id)
             assert(lp->result[i]);
         }
     }
+    module_priv_rep_set(this, thread_id, (void *)lp);
     return 0;
 }
 
@@ -913,13 +912,19 @@ static int32_t sde_engine_process(module_info_t *this, void *data)
 
 static int32_t sde_engine_fini_local(module_info_t *this, uint32_t thread_id)
 {
-	info_local_t *info;
+	info_local_t *lp;
+    info_global_t *gp;
+    uint32_t i;
 
-    info = (info_local_t *)module_priv_rep_get(this, thread_id);
-    if (info->result) {
-        free(info->result);
+    lp = (info_local_t *)module_priv_rep_get(this, thread_id);
+    gp = (info_global_t *)this->pub_rep;
+    if (lp->result) {
+        for (i=0; i<gp->graph_num; i++) {
+            free(lp->result[i]);
+        }
+        free(lp->result);
     }
-	free(info);
+	free(lp);
 	return 0;
 }
 static int32_t sde_engine_fini_global(module_info_t *this)
@@ -933,6 +938,7 @@ static int32_t sde_engine_fini_global(module_info_t *this)
     tid2rid_table_destroy(info->tid2rid_hd);
 
     dfa_num = info->graph_num;
+    TRACE;
     if (dfa_num > 0) {
         for (i=0; i<dfa_num; i++) {
             search_api->search_instance_free(info->graph_info[i].dfa_instance);
@@ -940,7 +946,6 @@ static int32_t sde_engine_fini_global(module_info_t *this)
         }
         free(info->graph_info);
     }
-
 
     if (info) {
 		free(info);

@@ -338,9 +338,11 @@ sf_proto_conf_t *__proto_conf_read()
 		p = ldlua_table_raw_get_string(L, ENGINE_LIST_NAME, i);
 		assert(strlen(p) <= ENGINE_NAME_LEN);
 		strcpy(sf_conf->engines[i-1].name, p);
-        LIST_HEAD_INIT(&sf_conf->engines[i-1].conf.list);
+        sf_conf->engines[i-1].conf = zmalloc(common_data_head_t *, sizeof(common_data_t));
+        assert(sf_conf->engines[i-1].conf);
+        LIST_HEAD_INIT(&sf_conf->engines[i-1].conf->list);
 
-        assert(__engines_conf_read(L, p, &sf_conf->engines[i-1].conf) == 0);
+        assert(__engines_conf_read(L, p, sf_conf->engines[i-1].conf) == 0);
 	}
 
 	proto_num = ldlua_table_items_num(L, PROTO_LIST_NAME);
@@ -398,7 +400,8 @@ void __proto_conf_free(void *data)
 	}
 	if (conf->engines) {
         for (i=0; i<conf->total_engine_num; i++) {
-            __common_data_free(&conf->engines[i].conf);
+            printf("free engines %s\n", conf->engines[i].name);
+            __common_data_free(conf->engines[i].conf);
         }
         free(conf->engines);
 	}

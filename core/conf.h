@@ -54,7 +54,7 @@ typedef struct proto_conf {
 
 typedef struct detect_engine {
 	char name[ENGINE_NAME_LEN];
-    common_data_head_t conf;
+    common_data_head_t *conf;
 } detect_engine_t;
 
 typedef struct sf_proto_conf {

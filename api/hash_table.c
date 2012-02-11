@@ -47,7 +47,6 @@ hash_table_hd_t* hash_table_init(uint32_t bucket_num, uint32_t lock_type)
 	assert(hd);
 	memset(hd, 0, sizeof(hash_table_hd_t));
 
-    TRACE;
 	hd->bucket_num = bucket_num;
 	hd->lock_type = lock_type;
 
