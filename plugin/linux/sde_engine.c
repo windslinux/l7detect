@@ -516,9 +516,21 @@ static void pstr_table_destroy(hash_table_hd_t *hd)
     }
 }
 
-static uint32_t pstr_get_graph_id(pattern_head_t *pat_head, range_t *range)
+static uint32_t pstr_get_graph_id(info_global_t *gp, pattern_head_t *pat_head, range_t *range)
 {
-    return 0;
+    uint32_t i, j;
+    dfa_graph_info_t *info;
+
+    for (i=0; i<gp->graph_num; i++) {
+        info = &gp->graph_info[i];
+        for (j=0; j<info->pattern_range_num; j++) {
+            if (info->pattern_ranges[j].min <= range->min &&
+                info->pattern_ranges[j].max >= range->max) {
+                return i;
+            }
+        }
+    }
+    return i-1;/*default*/
 }
 
 #if 0
@@ -677,7 +689,8 @@ static void __handle_sde_rule(info_global_t *gp, uint32_t proto_id, range_head_t
             if (found) {
                 range_hd[i].ranges[j].tid = table_range->ranges[j].tid;
             } else {
-                graph_id = pstr_get_graph_id(&pattern_hd, &range_hd[i].ranges[j]);
+                graph_id = pstr_get_graph_id(gp,
+                                            &pattern_hd, &range_hd[i].ranges[j]);
                 dfa_graph_info_t *graph_info = &gp->graph_info[graph_id];
 
                 status = pstr_item_insert_range(node, &range_hd[i].ranges[j],
