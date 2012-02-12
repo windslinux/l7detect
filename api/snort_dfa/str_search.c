@@ -197,7 +197,6 @@ void *  SearchInstanceNew(void)
 
     search->mpse  = mpseNew(MPSE_AC_BNFA, MPSE_DONT_INCREMENT_GLOBAL_COUNT,
                             NULL, NULL, NULL);
-    printf("search=%p, mpse=%p\n", search, search->mpse);
     if (search-> mpse == NULL )
     {
         free(search);

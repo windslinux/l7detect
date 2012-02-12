@@ -400,7 +400,6 @@ void __proto_conf_free(void *data)
 	}
 	if (conf->engines) {
         for (i=0; i<conf->total_engine_num; i++) {
-            printf("free engines %s\n", conf->engines[i].name);
             __common_data_free(conf->engines[i].conf);
         }
         free(conf->engines);

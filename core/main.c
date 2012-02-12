@@ -151,12 +151,10 @@ static int32_t __module_fini(module_hd_t **module_hd_pp)
     module_hd_t *module_hd_p = *module_hd_pp;
     uint32_t i;
 
-    TRACE;
     for (i=0; i<g_conf.thread_num; i++) {
         status = module_list_fini_local(module_hd_p, i);
         if_error_return(status == STATUS_OK, status);
     }
-    TRACE;
     module_list_fini_global(module_hd_p);
     status = module_manage_fini(module_hd_pp);
     if_error_return(status == STATUS_OK, status);

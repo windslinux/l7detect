@@ -280,7 +280,6 @@ do_decap_udp:
 		__pkts_cap(info, MALFORMED_PKTS);
 		stats->malformed_pkts++;
 		packet->pktag = 0;
-        TRACE;
 		return 0;
 	}
 do_decap_icmp:
@@ -336,9 +335,7 @@ static int32_t decap_fini_local(module_info_t *this, uint32_t thread_id)
     lp = (info_local_t *)module_priv_rep_get(this, thread_id);
     gp = (info_global_t *)this->pub_rep;
 
-    TRACE;
     mutex_lock(&gp->lock);
-    TRACE;
 	log_notice(syslog_p, "\ncore %d--------------decap packet info---------------\n", thread_id);
 	__pkts_dump(lp);
 	log_notice(syslog_p, "\n");
