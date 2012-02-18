@@ -1,32 +1,37 @@
 gstate = {init=0, s1=1, s2=2, s3=3, s4=4, s5=5, s6=6, s7=7, s8=8, final=9}
 --lde引擎是顺序匹配，顺序由proto_list决定
-proto_list={"qq_talk", "ppstream", "qqlive", "http", "dns", "ssl", "nat",
+proto_list={"ppstream", "qqlive", "http", "dns", "ssl", "nat",
 			"sametime", "qq_file", "ssh"}
 engine_list={"pde", "sde", "lde"}
 pkb_dir = {up=1, down=2}
 
 sde={}
 sde.conf = {
-                {"0~7", "-8~-1"},
+                {"0~7", "-8~-1"},/*第一个图的范围为0~7以及-8~-1*/
                 --all必须放在最后一个
                 {"all"},
            }
 
-qq_talk = {}
-qq_talk.pde="udp/8000,tcp/8000,tcp/14000"
-qq_talk.sde={
-                {["0~1|6~9"]="01|03", ["-1"]="08|07"};
-                {["1"]="09", ["2~5|6~10"]="040506(zhouxiaodong)"};--在字节2-5开始的位置出现后面的字符序列
-            }
-qq_talk.lde = function(buf, session)
+--下面的是一个实例协议
+--[[demo_proto = {}
+    demo_proto.pde="udp/8000,tcp/8000,tcp/14000" -- pde是端口规则，多个规则是并的关系，只要满足一个即可
+    demo_proto.sde={                             -- sde是字符规则，由索引和值两部分组成，索引需要用引号括起来，索引范围用~连接，\
+                                                    有多种可能性用|分隔开来，值需要用引号括起来，默认是16进制，不需要写0x，如果 \
+                                                    是字符串可以用括号括起来，可以混用，如"0203(windslinux)"
+                    {["0"]="fe", ["3~5|-5~-1"]="030405fe"}, --索引为0值为fe，并且（一个花括号内的多个索引值为与的关系）\
+                                                            索引3~5之间或者-5~-1（最后一个字节）之间有序列为:030405fe
+                    {["0"]="fd", ["2~4"]=3456},           --或者（多个花括号之间是或的关系）索引为0的值为fe，索引2~4之间的序列为3456
+                }
+    demo_proto.lde = function(buf, session)
 			  local state = gstate.init
-			  if (buf:len() >= 2) then
-			  if (buf:getbyte(0) == 0x02 and buf:getbyte(-1) == 0x03) then
+			  if (buf:len() > 2) then
+			  if (buf(1,2):uintle() == buf:len() + 2) then
 			      state = gstate.final
 			  end
 			  end
 			  return state
 			  end
+]]
 
 qq_file = {}
 qq_file.lde = function(buf, session)

@@ -94,8 +94,16 @@ enum {
     SHIFT_MODE,
 };
 
+typedef struct pid_info {
+    uint32_t total_num;
+    struct {
+        uint32_t graph_id;
+        uint32_t pid;
+    } *pids;
+} pid_info_t;
+
 typedef struct hash_pstr_info {
-    uint64_t graph_mask;
+    pid_info_t pid_info;
     pattern_head_t pat_head;
     range_head_t range_head;
 } hash_pstr_info_t;
@@ -371,7 +379,7 @@ static int32_t pid2tid_array_create(dfa_graph_info_t *graph_info)
     return 0;
 }
 
-static int32_t pid2tid_array_insert(dfa_graph_info_t *graph_info, range_t *range)
+static int32_t pid2tid_array_insert(dfa_graph_info_t *graph_info, uint32_t pid, range_t *range)
 {
     //printf("current_id=%d, pid_num=%d\n", graph_info->current_pid, graph_info->pid_num);
     range_head_t *range_hd;
@@ -384,7 +392,7 @@ static int32_t pid2tid_array_insert(dfa_graph_info_t *graph_info, range_t *range
         graph_info->pid_num += PID_ARRAY_INCR_STEP;
         graph_info->pid2tid_array = array;
     }
-    range_hd = &graph_info->pid2tid_array[graph_info->current_pid];
+    range_hd = &graph_info->pid2tid_array[pid];
     ranges = realloc(range_hd->ranges, sizeof(range_t) * (range_hd->range_num + 1));
     assert(ranges);
     memcpy(&ranges[range_hd->range_num], range, sizeof(range_t));
@@ -410,7 +418,6 @@ static inline int32_t pid2tid_array_search(dfa_graph_info_t *graph_info, pid_res
         range = &range_hd->ranges[i];
         min = range->min >= 0 ? (uint32_t )range->min : (uint32_t)(range->min + pkt_size);
         max = range->max >= 0 ? (uint32_t )range->max : (uint32_t)(range->max + pkt_size);
-
         if (offset >= min && offset <= max) {
             assert(*tid_index < MAX_TID_RESULT);
             tid_result[*tid_index] = range->tid;
@@ -503,7 +510,6 @@ static int32_t pstr_item_insert_range(hash_pstr_info_t *node, range_t *range,
     table_range_hd->ranges = ranges;
     table_range_hd->range_num++;
 
-    node->graph_mask |= 1 << graph_id;
     return 0;
 }
 
@@ -528,7 +534,10 @@ static void pstr_table_destroy(hash_table_hd_t *hd)
     hash_pstr_info_t *info;
     for (i=0; i<hd->bucket_num; i++) {
         hash_table_one_bucket_for_each(hd, i, info) {
-            if(info->pat_head.value) {
+            if (info->pid_info.pids) {
+                free(info->pid_info.pids);
+            }
+            if (info->pat_head.value) {
                 free(info->pat_head.value);
             }
             if (info->range_head.ranges) {
@@ -668,8 +677,7 @@ static void __handle_sde_rule(info_global_t *gp, uint32_t proto_id, range_head_t
     uint32_t *tid_id_record, *tid_record;
     int32_t status;
     int32_t new_node;
-    uint32_t graph_id;
-    uint64_t graph_mask;
+    uint32_t graph_id, pid;
     pattern_head_t pattern_hd;
     hash_pstr_info_t *node;
 
@@ -680,7 +688,6 @@ static void __handle_sde_rule(info_global_t *gp, uint32_t proto_id, range_head_t
     tid_record = zmalloc(uint32_t *, sizeof(uint32_t) * total_num);
     assert(tid_record);
 
-    assert((sizeof(graph_mask) * 8) > gp->graph_num);
     for (i=0; i<total_num; i++) {
         new_node = 0;
         pattern_hd.value = zmalloc(uint8_t *, strlen(pp[i]));
@@ -690,10 +697,7 @@ static void __handle_sde_rule(info_global_t *gp, uint32_t proto_id, range_head_t
         if (node == NULL) {
             node = pstr_table_create_insert_pattern(gp->pstr_hd, &pattern_hd);
             assert(node);
-            graph_mask = 0;
             new_node = 1;
-        }else {
-            graph_mask = node->graph_mask;
         }
         range_head_t *table_range = &node->range_head;
         assert(table_range);
@@ -715,16 +719,32 @@ static void __handle_sde_rule(info_global_t *gp, uint32_t proto_id, range_head_t
 
                 status = pstr_item_insert_range(node, &range_hd[i].ranges[j],
                                                 &gp->current_tid, graph_id);
-                pid2tid_array_insert(graph_info, &range_hd[i].ranges[j]);
-                if ((graph_mask & (1<<graph_id)) == 0) {
-                    search_api->search_instance_add(graph_info->dfa_instance, (const char *)pattern_hd.value,
+                for (k=0; k<node->pid_info.total_num; k++) {
+                    if (node->pid_info.pids[k].graph_id == graph_id) {
+                        break;
+                    }
+                }
+                if (k < node->pid_info.total_num) {
+                    pid = node->pid_info.pids[k].pid;
+                    pid2tid_array_insert(graph_info, pid, &range_hd[i].ranges[j]);
+                } else {
+                    node->pid_info.pids = realloc(node->pid_info.pids,
+                                            sizeof(*node->pid_info.pids) * (node->pid_info.total_num + 1));
+                    assert(node->pid_info.pids);
+                    node->pid_info.pids[node->pid_info.total_num].graph_id = graph_id;
+                    node->pid_info.pids[node->pid_info.total_num].pid = graph_info->current_pid;
+                    node->pid_info.total_num++;
+                    pid = graph_info->current_pid;
+                    pid2tid_array_insert(graph_info, pid, &range_hd[i].ranges[j]);
+                    search_api->search_instance_add(graph_info->dfa_instance,
+                                                    (const char *)pattern_hd.value,
                                                     (int)pattern_hd.len, graph_info->current_pid);
                     graph_info->current_pid++;
                 }
 
-                log_debug(ptlog_p, "range: %d~%d, content: %s, tid %d\n",
+                log_debug(ptlog_p, "range: %d~%d, content: %s, tid %d, pid %d\n",
                         range_hd[i].ranges[j].min, range_hd[i].ranges[j].max,
-                        pp[i], range_hd[i].ranges[j].tid);
+                        pp[i], range_hd[i].ranges[j].tid, pid);
                 assert(status == 0);
             }
         }
@@ -977,7 +997,6 @@ static int32_t sde_engine_init_local(module_info_t *this, uint32_t thread_id)
     assert(lp->proto_idmask);
     module_priv_rep_set(this, thread_id, (void *)lp);
 
-    pthread_setspecific(key, lp);
     return 0;
 }
 
@@ -987,7 +1006,7 @@ static int match_cb(void* id, void * tree, int index, void *data, void *neg_list
     info_local_t *lp;
     pid_result_t *result;
 
-    pid = *(uint32_t *)id;
+    pid = (unsigned long)id;
     lp = (info_local_t *)pthread_getspecific(key);
     assert(lp->pid_index < MAX_DFA_RESULT);
     result = &lp->pid_result[lp->current_graph][lp->pid_index++];
@@ -1008,10 +1027,11 @@ static int32_t sde_engine_process(module_info_t *this, void *data)
     info_global_t *gp;
 	info_local_t *lp;
     dfa_graph_info_t *graph_info;
-    uint32_t i, j;
+    uint32_t i, j, k;
     int32_t min, max, status;
     int32_t app_id;
     uint32_t tag = 0;
+    uint32_t record;
     uint8_t *pattern;
 
 	proto_comm = (proto_comm_t *)data;
@@ -1019,6 +1039,7 @@ static int32_t sde_engine_process(module_info_t *this, void *data)
 	gp = (info_global_t *)this->pub_rep;
     lp = (info_local_t *)module_priv_rep_get(this, proto_comm->thread_id);
 
+    pthread_setspecific(key, lp);
     lp->tid_index = 0;
     for (i=0; i<gp->graph_num; i++) {
         graph_info = &gp->graph_info[i];
@@ -1035,15 +1056,21 @@ static int32_t sde_engine_process(module_info_t *this, void *data)
             if (max < packet->app_offset) {
                 continue;
             }
-            min = minval(packet->app_offset, (uint32_t)min);
+            min = maxval(packet->app_offset, (uint32_t)min);
             pattern = (uint8_t *)packet->data + min;
             max = minval(packet->app_offset + packet->real_applen, (uint32_t)max);
+            record = lp->pid_index;
             search_api->search_instance_find(graph_info->dfa_instance, (const char *)pattern,
                     (uint32_t)(max - min + 1), 0, match_cb);
+            if (min > packet->app_offset) {
+                for (k=record; k<lp->pid_index; k++) {
+                    lp->pid_result[i][k].index += min - packet->app_offset;
+                }
+            }
         }
         for (j=0; j<lp->pid_index; j++) {
             status = pid2tid_array_search(graph_info, &lp->pid_result[i][j], lp->tid_result,
-                    &lp->tid_index, packet->len);
+                    &lp->tid_index, packet->real_applen);
             if (status != 0) {
                 log_error(ptlog_p, "Too much tid, omitted\n");
                 break;
@@ -1051,6 +1078,7 @@ static int32_t sde_engine_process(module_info_t *this, void *data)
         }
     }
 
+    qsort(lp->tid_result, lp->tid_index, sizeof(uint32_t), __tid_sort_cb);
     for (i=0; i<lp->tid_index; i++) {
         if (longmask_bit_is_set(gp->tidhd_idmask, lp->tid_result[i])) {
             app_id = tid2rid_table_search(gp->tid2rid_hd, &lp->tid_result[i], lp->tid_index - i);
