@@ -76,6 +76,7 @@ typedef struct conf {
 		char *capfile;
 	} u;
     uint32_t thread_num;
+    uint32_t pkt_num;
     char *configfile;
 	char *logfile;
 	char *protofile;

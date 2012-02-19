@@ -31,7 +31,7 @@ static void __session_conf_show(session_conf_t *session);
 
 static void __usage(char *prog_name)
 {
-	print("%s [-i ifname] [-r capfile] [-c config_file_path] [-h]\n", prog_name);
+	print("%s [-i ifname] [-r capfile] [-c config_file_path] [-h] [-n pkt_num]\n", prog_name);
 	exit (-1);
 }
 
@@ -43,7 +43,7 @@ static void __init_default_config()
 static int __parse_args(int argc, char *argv[])
 {
 	int opt;
-	while ((opt = getopt(argc, argv, "i:r:c:h")) > 0) {
+	while ((opt = getopt(argc, argv, "i:r:c:n:h")) > 0) {
 		switch (opt) {
 		case 'i':
 			g_conf.mode = MODE_LIVE;
@@ -56,6 +56,9 @@ static int __parse_args(int argc, char *argv[])
 		case 'c':
             g_conf.configfile = optarg;
 			break;
+        case 'n':
+            g_conf.pkt_num = atoi(optarg);
+            break;
 		case 'h':
 		default:
 			__usage(argv[0]);

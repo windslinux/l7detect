@@ -39,6 +39,7 @@ void worker_thread_process(void *data)
 void process_loop(module_hd_t *module_head)
 {
 	int32_t status, tag_id;
+    uint64_t pkt_num = 0;
 	extern int system_exit;
     module_info_t *recv;
     packet_t *packet;
@@ -57,12 +58,16 @@ void process_loop(module_hd_t *module_head)
             tag_id = recv->ops->process(recv, packet);
             if (tag_id > 0) {
                 assert(packet->data);
+                pkt_num++;
                 status = threadpool_add_task(tp, worker_thread_process, packet, 0);
                 if (status != 0) {
                     log_error(syslog_p, "Threadpool add task, status %d\n", status);
                     status = 0;
                 }
-            } else {
+                if (g_conf.pkt_num != 0 && pkt_num >= g_conf.pkt_num) {
+                    system_exit = 1;
+                }
+           } else {
                 status = tag_id;
                 zone_free(packet_zone, packet);
             }
@@ -74,6 +79,10 @@ void process_loop(module_hd_t *module_head)
     } else if (g_conf.mode == MODE_SE) {
         do {
             status = module_list_process(module_head, pktag_hd_p, -1, NULL);
+            pkt_num++;
+            if (g_conf.pkt_num != 0 && pkt_num >= g_conf.pkt_num) {
+                system_exit = 1;
+            }
 	    } while (status >= 0 && !system_exit);
     }
 }
