@@ -432,7 +432,15 @@ static inline int32_t pid2tid_array_search(dfa_graph_info_t *graph_info, pid_res
 
 static void pid2tid_array_destroy(dfa_graph_info_t *graph_info)
 {
+    uint32_t i;
+
     if (graph_info->pid2tid_array) {
+        for (i=0; i<graph_info->current_pid; i++) {
+            range_head_t *range_hd = &graph_info->pid2tid_array[i];
+            if (range_hd != NULL && (range_hd->ranges != NULL)) {
+                free(range_hd->ranges);
+            }
+        }
         free(graph_info->pid2tid_array);
     }
 }
