@@ -8,6 +8,7 @@
 
 #define common_free_cb free
 #define ENGINE_NAME_LEN 10
+#define SESSION_CONF_NAME "session_conf"
 #define SF_PROTO_CONF_NAME "proto_conf"
 
 #define INVALID_ENGINE_ID 65535
@@ -75,6 +76,7 @@ typedef struct conf {
 		char *capfile;
 	} u;
     uint32_t thread_num;
+    char *configfile;
 	char *logfile;
 	char *protofile;
 	list_head_t module_conf_head;

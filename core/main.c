@@ -173,7 +173,6 @@ int main(int argc, char *argv[])
 	}
 
 	test();
-
 /*初始化*/
 	assert(__sys_init() == 0);
 	log_notice(syslog_p, "sys init OK!\n");

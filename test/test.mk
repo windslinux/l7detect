@@ -6,7 +6,6 @@ d               :=  $(dir)
 
 LIBRARY := $(OBJ_DIR)/libtest.a
 
-TEST_OBJS = $(OBJ_DIR)/conf_test.o
 TEST_OBJS += $(OBJ_DIR)/test.o
 
 OBJS_$(d)  :=  $(TEST_OBJS)
@@ -22,9 +21,9 @@ DEPS_$(d)   :=  $(OBJS_$(d):.o=.d)
 
 LIBS_LIST   :=  $(LIBS_LIST) $(LIBRARY)
 
-CLEAN_LIST := $(CLEAN_LIST) 
-CLEAN_LIST += $(OBJS_$(d)) 
-CLEAN_LIST += $(DEPS_$(d)) 
+CLEAN_LIST := $(CLEAN_LIST)
+CLEAN_LIST += $(OBJS_$(d))
+CLEAN_LIST += $(DEPS_$(d))
 CLEAN_LIST += $(LIBRARY) *~
 
 -include $(DEPS_$(d))

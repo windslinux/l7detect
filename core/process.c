@@ -64,6 +64,7 @@ void process_loop(module_hd_t *module_head)
                 }
             } else {
                 status = tag_id;
+                zone_free(packet_zone, packet);
             }
         } while( status >= 0 && !system_exit);
         if (g_conf.mode == MODE_FILE) {
