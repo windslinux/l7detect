@@ -215,9 +215,11 @@ static int32_t sf_plugin_fini_local(module_info_t *this, uint32_t thread_id)
 {
     uint32_t i;
     info_local_t *info;
+    info_global_t *gp;
     sf_proto_conf_t *pconf;
 
     info = (info_local_t *)module_priv_rep_get(this, thread_id);
+    gp = (info_global_t *)this->pub_rep;
     /*fini_local发生在fini_global之前，因此不能再使用global的变量*/
     pconf = info->pconf;
 
@@ -225,7 +227,8 @@ static int32_t sf_plugin_fini_local(module_info_t *this, uint32_t thread_id)
 		longmask_destroy(info->proto_comm.match_mask[i]);
 	}
 	free(info->proto_comm.match_mask);
-    return 0;
+
+    return module_list_fini_local(gp->plugin, thread_id);
 }
 
 static int32_t sf_plugin_fini_global(module_info_t *this)
@@ -234,6 +237,9 @@ static int32_t sf_plugin_fini_global(module_info_t *this)
 	info_global_t *info;
 
 	info = (info_global_t *)this->pub_rep;
+
+    module_list_fini_global(info->plugin);
+
 	module_manage_fini(&info->plugin);
 	tag_fini(&info->tag);
 

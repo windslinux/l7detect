@@ -48,6 +48,11 @@ enum {
 	MALFORMED_PKTS,
 } cap_code;
 
+typedef struct info_global {
+    mutex_t lock;
+    decap_stats_t stats;
+} info_global_t;
+
 typedef struct info_local {
 	packet_t *packet;
 	decap_stats_t stats;
@@ -94,11 +99,16 @@ static inline void __pkts_dump(info_local_t *info)
 
 static int32_t decap_init_global(module_info_t *this)
 {
+    info_global_t *gp;
     ipv4_frag_tag = tag_id_get_from_name(pktag_hd_p, "ipv4_frag");
 	tcp_tag = tag_id_get_from_name(pktag_hd_p, "tcp");
 	udp_tag = tag_id_get_from_name(pktag_hd_p, "udp");
 
-    return 0;
+    gp = zmalloc(info_global_t *, sizeof(info_global_t));
+    assert(gp);
+
+    this->pub_rep = gp;
+    return mutex_init(&gp->lock, NULL);
 }
 
 static int32_t decap_init_local(module_info_t *this, uint32_t thread_id)
@@ -270,7 +280,6 @@ do_decap_udp:
 		__pkts_cap(info, MALFORMED_PKTS);
 		stats->malformed_pkts++;
 		packet->pktag = 0;
-        TRACE;
 		return 0;
 	}
 do_decap_icmp:
@@ -297,50 +306,52 @@ unknown_pkts:
 
 static int decap_fini_global(module_info_t *this)
 {
-	decap_stats_t stats;
-    uint32_t i;
+    info_global_t *info;
+	decap_stats_t *stats;
 
-    memset(&stats, 0, sizeof(decap_stats_t));
-    for (i=0; i<g_conf.thread_num; i++) {
-        info_local_t *info = (info_local_t *)module_priv_rep_get(this, i);
-        stats.ipv4_frag_pkts += info->stats.ipv4_frag_pkts;
-        stats.ipv6_frag_pkts += info->stats.ipv6_frag_pkts;
-        stats.ipv6_pkts += info->stats.ipv6_pkts;
-        stats.icmp_pkts += info->stats.icmp_pkts;
-        stats.arp_pkts += info->stats.arp_pkts;
-        stats.tcp_pkts += info->stats.tcp_pkts;
-        stats.udp_pkts += info->stats.udp_pkts;
-        stats.malformed_pkts += info->stats.malformed_pkts;
-        stats.unknown_pkts += info->stats.unknown_pkts;
-    }
+    info = (info_global_t *)this->pub_rep;
+    stats = &info->stats;
 
 	log_notice(syslog_p, "\n------------------decapinfo---------------\n");
-	log_notice(syslog_p, "ipv4_frag_pkts=%llu\n", stats.ipv4_frag_pkts);
-	log_notice(syslog_p, "ipv6_frag_pkts=%llu\n", stats.ipv6_frag_pkts);
-	log_notice(syslog_p, "ipv6_pkts=%llu\n", stats.ipv6_pkts);
-	log_notice(syslog_p, "icmp_pkts=%llu\n", stats.icmp_pkts);
-	log_notice(syslog_p, "arp_pkts=%llu\n", stats.arp_pkts);
-	log_notice(syslog_p, "tcp_pkts=%llu\n", stats.tcp_pkts);
-	log_notice(syslog_p, "udp_pkts=%llu\n", stats.udp_pkts);
-	log_notice(syslog_p, "malformed_pkts=%llu\n", stats.malformed_pkts);
-	log_notice(syslog_p, "unknown_pkts=%llu\n", stats.unknown_pkts);
+	log_notice(syslog_p, "ipv4_frag_pkts=%llu\n", stats->ipv4_frag_pkts);
+	log_notice(syslog_p, "ipv6_frag_pkts=%llu\n", stats->ipv6_frag_pkts);
+	log_notice(syslog_p, "ipv6_pkts=%llu\n", stats->ipv6_pkts);
+	log_notice(syslog_p, "icmp_pkts=%llu\n", stats->icmp_pkts);
+	log_notice(syslog_p, "arp_pkts=%llu\n", stats->arp_pkts);
+	log_notice(syslog_p, "tcp_pkts=%llu\n", stats->tcp_pkts);
+	log_notice(syslog_p, "udp_pkts=%llu\n", stats->udp_pkts);
+	log_notice(syslog_p, "malformed_pkts=%llu\n", stats->malformed_pkts);
+	log_notice(syslog_p, "unknown_pkts=%llu\n", stats->unknown_pkts);
 
-	log_notice(syslog_p, "\n------------------decap packet info---------------\n");
-    for (i=0; i<g_conf.thread_num; i++) {
-        info_local_t *info = (info_local_t *)module_priv_rep_get(this, i);
-	    __pkts_dump(info);
-    }
-	log_notice(syslog_p, "\n");
+    free(info);
     return 0;
 }
 
 static int32_t decap_fini_local(module_info_t *this, uint32_t thread_id)
 {
-    info_local_t *info;
+    info_local_t *lp;
+    info_global_t *gp;
 
-    info = (info_local_t *)module_priv_rep_get(this, thread_id);
-	if (info) {
-		free(info);
-	}
+    lp = (info_local_t *)module_priv_rep_get(this, thread_id);
+    gp = (info_global_t *)this->pub_rep;
+
+    mutex_lock(&gp->lock);
+	log_notice(syslog_p, "\ncore %d--------------decap packet info---------------\n", thread_id);
+	__pkts_dump(lp);
+	log_notice(syslog_p, "\n");
+
+    gp->stats.ipv4_frag_pkts += lp->stats.ipv4_frag_pkts;
+    gp->stats.ipv6_frag_pkts += lp->stats.ipv6_frag_pkts;
+    gp->stats.ipv6_pkts += lp->stats.ipv6_pkts;
+    gp->stats.icmp_pkts += lp->stats.icmp_pkts;
+    gp->stats.arp_pkts += lp->stats.arp_pkts;
+    gp->stats.tcp_pkts += lp->stats.tcp_pkts;
+    gp->stats.udp_pkts += lp->stats.udp_pkts;
+    gp->stats.malformed_pkts += lp->stats.malformed_pkts;
+    gp->stats.unknown_pkts += lp->stats.unknown_pkts;
+
+    mutex_unlock(&gp->lock);
+
+	free(lp);
     return 0;
 }

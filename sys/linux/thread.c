@@ -41,6 +41,7 @@ uint32_t thread_fini_local()
 
 uint32_t thread_fini_global()
 {
+    pthread_key_delete(key);
     return 0;
 }
 

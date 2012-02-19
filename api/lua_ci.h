@@ -5,10 +5,10 @@
 #include "lauxlib.h"
 #include "lualib.h"
 
-#define LDLUA_METHOD static int 
-#define LDLUA_CONSTRUCTOR static int 
-#define LDLUA_ATTR_SET static int 
-#define LDLUA_ATTR_GET static int 
+#define LDLUA_METHOD static int
+#define LDLUA_CONSTRUCTOR static int
+#define LDLUA_ATTR_SET static int
+#define LDLUA_ATTR_GET static int
 #define LDLUA_METAMETHOD static int
 #define NOP
 #define TRUE 1
@@ -89,15 +89,17 @@
 		})
 
 int ldlua_table_items_num(lua_State *L, char *table_name);
+void ldlua_table_raw_get(lua_State *L, char *table_name);
 char* ldlua_table_raw_get_string(lua_State *L, char *table_name, int index);
 char* ldlua_table_key_get_string(lua_State *L, char *table_name, char *key);
 int ldlua_table_key_get_num(lua_State *L, char *table_name, char *key);
 int ldlua_table_raw_get_number(lua_State *L, char *table_name, int index);
 int ldlua_table_item_type(lua_State *L, char *table_name, char *key);
+int ldlua_has_table(lua_State *L, char *table_name);
 
 #define ldlua_table_item_exist(L, table_name, item_name) (	\
 		ldlua_table_item_type(L, table_name, item_name) > 0? TRUE:FALSE) \
-		
+
 
 
 #endif

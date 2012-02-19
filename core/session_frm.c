@@ -92,6 +92,8 @@ typedef struct session_item {
 typedef uint32_t (*hash_func)(session_index_t *info);
 
 typedef struct info_global {
+    mutex_t lock;
+    session_frm_stats_t stats;
     session_conf_t *conf;
 	sf_proto_conf_t *sf_conf;
 	hash_table_hd_t *session_table;
@@ -186,7 +188,8 @@ static void *__event_thread_cb(void *arg)
     rv = evtimer_assign(&info->timer.ev, info->timer.base, __flow_timer_process, info);
     assert(rv == 0);
 
-    rv = evtimer_add(&info->timer.ev, &info->timer.tv);
+    //rv = evtimer_add(&info->timer.ev, &info->timer.tv);
+    rv = 0;
     assert(rv == 0);
     event_base_loop(info->timer.base, 0);
     return NULL;
@@ -425,6 +428,7 @@ static int32_t session_frm_init_global(module_info_t *this)
     info = zmalloc(info_global_t *, sizeof(info_global_t));
 	assert(info);
 
+    mutex_init(&info->lock, NULL);
 	conf = (session_conf_t *)conf_module_config_search("session", NULL);
 	assert(conf);
 
@@ -638,18 +642,23 @@ static void session_frm_result_free(module_info_t *this)
 
 static int32_t session_frm_fini_local(module_info_t *this, uint32_t thread_id)
 {
-    info_local_t *info = (info_local_t *)module_priv_rep_get(this, thread_id);
-    if (info) {
-        free(info);
-    }
+    info_local_t *lp = (info_local_t *)module_priv_rep_get(this, thread_id);
+    info_global_t *gp = (info_global_t *)this->pub_rep;
+
+    mutex_lock(&gp->lock);
+    gp->stats.unknown_pkts += lp->stats.unknown_pkts;
+    gp->stats.unknown_dir += lp->stats.unknown_dir;
+    gp->stats.session_count += lp->stats.session_count;
+    gp->stats.session_failed += lp->stats.session_failed;
+    mutex_unlock(&gp->lock);
+
+    free(lp);
     return 0;
 }
 
 static int32_t session_frm_fini_global(module_info_t *this)
 {
     info_global_t *info = (info_global_t *)this->pub_rep;
-    session_frm_stats_t stats;
-    uint32_t i;
     int rv;
 
     rv = event_base_loopbreak(info->timer.base);
@@ -660,16 +669,8 @@ static int32_t session_frm_fini_global(module_info_t *this)
     evtimer_del(&info->timer.ev);
 
     event_base_free(info->timer.base);
-    memset(&stats, 0, sizeof(session_frm_stats_t));
-    for(i=0; i<g_conf.thread_num; i++) {
-        info_local_t *info = (info_local_t *)module_priv_rep_get(this, i);
-        stats.unknown_pkts += info->stats.unknown_pkts;
-        stats.unknown_dir += info->stats.unknown_dir;
-        stats.session_count += info->stats.session_count;
-        stats.session_failed += info->stats.session_failed;
-    }
 
-	__session_item_show(info, &stats);
+	__session_item_show(info, &info->stats);
 
 	if (info != NULL) {
 		if (info->log_c) {

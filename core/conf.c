@@ -123,6 +123,134 @@ uint32_t __read_file(char *filename, char **rd_buf, int init_size, int step)
 	return read_size;
 }
 
+void __common_data_create_add(const char *key, const char *value, common_data_head_t *data_head)
+{
+    list_head_t *head = &data_head->list;
+    common_data_t *data;
+
+    data = zmalloc(common_data_t *, sizeof(common_data_t));
+    assert(data);
+
+    if (key != NULL) {
+        data->key = malloc(strlen(key));
+        strcpy(data->key, key);
+    }
+    if (value != NULL) {
+        data->value = malloc(strlen(value));
+        strcpy(data->value, value);
+    }
+    list_add_tail(&data->list, head);
+    data_head->item_num++;
+}
+
+void __common_data_show(common_data_head_t *head)
+{
+    list_head_t *list_head, *p;
+    if (head->item_num <= 0) {
+        return;
+    }
+    do {
+        list_head = &head->list;
+        printf("\t\t");
+        list_for_each(p, list_head) {
+            common_data_t *data = list_entry(p, common_data_t, list);
+            if (data->key != NULL) {
+                printf("key:%s, ", data->key);
+            }
+            if (data->value != NULL) {
+                printf("value:%s ", data->value);
+            }
+        }
+        printf("\n");
+        head = head->next;
+    } while(head != NULL);
+}
+void __common_data_free(common_data_head_t *head)
+{
+    list_head_t *list_head, *temp, *p;
+    common_data_head_t *next;
+
+    do {
+        list_head = &head->list;
+        list_for_each_safe(p, temp, list_head) {
+            common_data_t *data = list_entry(p, common_data_t, list);
+            if (data->key != NULL) {
+                free(data->key);
+            }
+            if (data->value != NULL) {
+                free(data->value);
+            }
+        }
+        next = head->next;
+        free(head);
+        head = next;
+    } while(head != NULL);
+}
+
+void __get_lua_table_config(lua_State *L, common_data_head_t *head)
+{
+    uint32_t table_num, index;
+    uint32_t i;
+    common_data_head_t **pp = NULL;
+    const char *key, *value;
+
+    table_num = lua_objlen(L, -1);
+
+    for (i=1; i<=table_num; i++) {
+        int flag = 1;
+        lua_rawgeti(L, -1, i);
+        index = lua_gettop(L);
+        lua_pushnil(L);
+        while (lua_next(L, index) != 0) {
+            if (flag && (i != 1)) {
+                head = zmalloc(common_data_head_t *, sizeof(common_data_head_t));
+                LIST_HEAD_INIT(&head->list);
+                assert(head);
+                *pp = head;
+                flag = 0;
+            } else if (i == 1) {
+                flag = 0;
+            }
+            assert(lua_type(L, -1) == LUA_TSTRING);
+            assert(lua_type(L, -2) == LUA_TSTRING || lua_type(L, -2) == LUA_TNUMBER);
+
+            value = lua_tostring(L, -1);
+            if (lua_type(L, -2) != LUA_TSTRING) {
+                key = NULL;/*need to be fixed*/
+            } else {
+                key = lua_tostring(L, -2);
+            }
+            printf("add key %s, value %s\n", key, value?value:"NULL");
+            __common_data_create_add(key, value, head);
+            lua_pop(L, 1);
+        }
+        lua_pop(L, 1);
+        if (flag == 0) {
+            pp = (void *)&head->next;
+        }
+    }
+}
+
+int32_t __engines_conf_read(lua_State *L, char *engine_name, common_data_head_t *conf)
+{
+    int type;
+
+    if (!ldlua_has_table(L, engine_name)) {
+        return 0;
+    }
+	type = ldlua_table_item_type(L, engine_name, "conf");
+    if (type != LUA_TTABLE) {
+        /*No configuation found */
+        return 0;
+    } else {
+        ldlua_table_raw_get(L, engine_name);
+        lua_getfield(L, -1, "conf");
+        __get_lua_table_config(L, conf);
+        lua_pop(L, 2); /*balance the stack*/
+    }
+    return 0;
+}
+
 int32_t __proto_item_read(lua_State *L, char *proto_name, int index, sf_proto_conf_t *conf)
 {
 	uint32_t i;
@@ -136,29 +264,32 @@ int32_t __proto_item_read(lua_State *L, char *proto_name, int index, sf_proto_co
 	assert(p->name);
 	strcpy(p->name, proto_name);
 
-	p->engine_data = zmalloc(proto_engine_data_t *, sizeof(proto_engine_data_t) * conf->total_engine_num);
-	assert(p->engine_data);
+	p->engine_head = zmalloc(common_data_head_t *, sizeof(common_data_head_t) * conf->total_engine_num);
+	assert(p->engine_head);
 
 	for (i=0; i<conf->total_engine_num; i++) {
 		type = ldlua_table_item_type(L, proto_name, conf->engines[i].name);
+        LIST_HEAD_INIT(&p->engine_head[i].list);
 		if (type <= 0) {
-			p->engine_data[i].lua_type = -1;
+			p->engine_head[i].lua_type = -1;
 		} else {
-			p->engine_data[i].lua_type = type;
+			p->engine_head[i].lua_type = type;
 			p->engine_mask |= 1<<i;
 		}
 		if (type == LUA_TSTRING) {
 			char *str;
 			str = ldlua_table_key_get_string(L, proto_name, conf->engines[i].name);
 			assert(str && strlen(str) > 0);
-			p->engine_data[i].data = malloc(strlen(str) + 1);
-			assert(p->engine_data[i].data);
-			strcpy(p->engine_data[i].data, str);
-		}
+            __common_data_create_add(NULL, str, &p->engine_head[i]);
+		} else if (type == LUA_TTABLE) {
+            ldlua_table_raw_get(L, proto_name);
+            lua_getfield(L, -1, conf->engines[i].name);
+            __get_lua_table_config(L, &p->engine_head[i]);
+            lua_pop(L, 2); /*balance the stack*/
+      }
 	}
 	return 0;
 }
-
 
 sf_proto_conf_t *__proto_conf_read()
 {
@@ -207,6 +338,11 @@ sf_proto_conf_t *__proto_conf_read()
 		p = ldlua_table_raw_get_string(L, ENGINE_LIST_NAME, i);
 		assert(strlen(p) <= ENGINE_NAME_LEN);
 		strcpy(sf_conf->engines[i-1].name, p);
+        sf_conf->engines[i-1].conf = zmalloc(common_data_head_t *, sizeof(common_data_t));
+        assert(sf_conf->engines[i-1].conf);
+        LIST_HEAD_INIT(&sf_conf->engines[i-1].conf->list);
+
+        assert(__engines_conf_read(L, p, sf_conf->engines[i-1].conf) == 0);
 	}
 
 	proto_num = ldlua_table_items_num(L, PROTO_LIST_NAME);
@@ -227,6 +363,7 @@ sf_proto_conf_t *__proto_conf_read()
 
 	__proto_conf_show(sf_conf);
 
+    assert(lua_gettop(L) == 0);
 	lua_close(L);
 	return sf_conf;
 }
@@ -244,13 +381,12 @@ void __proto_conf_show(sf_proto_conf_t *conf)
 	for (i=0; i<conf->total_proto_num; i++) {
 		print("\tname:%s,engine_mask:%d\n", conf->protos[i].name, conf->protos[i].engine_mask);
 		for (j=0; j<conf->total_engine_num; j++) {
-			print("\t\tengine:%s, type:%d, data:%s\n", conf->engines[j].name,
-				  conf->protos[i].engine_data[j].lua_type,
-				  (conf->protos[i].engine_data[j].data == NULL)?"NULL":(char *)conf->protos[i].engine_data[j].data);
+			print("\t\tengine:%s, type:%d\n", conf->engines[j].name,
+				  conf->protos[i].engine_head[j].lua_type);
+            __common_data_show(&conf->protos[i].engine_head[j]);
 		}
 	}
 }
-
 
 void __proto_conf_free(void *data)
 {
@@ -263,7 +399,10 @@ void __proto_conf_free(void *data)
 		free(conf->app_luabuf);
 	}
 	if (conf->engines) {
-		free(conf->engines);
+        for (i=0; i<conf->total_engine_num; i++) {
+            __common_data_free(conf->engines[i].conf);
+        }
+        free(conf->engines);
 	}
 
 	if (conf->protos) {
@@ -271,11 +410,8 @@ void __proto_conf_free(void *data)
 			if (conf->protos[i].name) {
 				free(conf->protos[i].name);
 			}
-			if (conf->protos[i].engine_data) {
-				if (conf->protos[i].engine_data->data) {
-					free(conf->protos[i].engine_data->data);
-				}
-				free(conf->protos[i].engine_data);
+			if (conf->protos[i].engine_head) {
+                __common_data_free(conf->protos[i].engine_head);
 			}
 		}
 		free(conf->protos);

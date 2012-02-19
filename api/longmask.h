@@ -18,7 +18,7 @@ static inline longmask_t* longmask_create(uint32_t bit_num)
 {
 	uint32_t bytes = (bit_num + 7) / 8;
 	longmask_t *mask;
-	
+
 	if (bytes == 0) {
 		return NULL;
 	}
@@ -44,7 +44,7 @@ static inline int32_t longmask_bit1_find(longmask_t *mask, uint32_t start_bit)
 	uint32_t i;
 	uint32_t bytes, offset;
 	uint8_t *data;
-	
+
 	if(start_bit >= mask->bit_num) {
 		return -1;
 	}
@@ -53,7 +53,7 @@ static inline int32_t longmask_bit1_find(longmask_t *mask, uint32_t start_bit)
 	bytes = start_bit/8;
 	offset = start_bit % 8;
 	data += bytes;
-	
+
 	for (i=start_bit; i<mask->bit_num; i++) {
 		if ((*data) & (1<<offset)) {
 			return i;
@@ -72,7 +72,7 @@ static inline void longmask_bit_set(longmask_t *mask, uint32_t bit)
 {
 	uint32_t bytes, offset;
 	uint8_t *data;
-	
+
 	assert(mask);
 	assert(bit < mask->bit_num);
 	data = mask->data;
@@ -84,11 +84,27 @@ static inline void longmask_bit_set(longmask_t *mask, uint32_t bit)
 	*data |= 1<<offset;
 }
 
+static inline int32_t longmask_bit_is_set(longmask_t *mask, uint32_t bit)
+{
+	uint32_t bytes, offset;
+	uint8_t *data;
+
+	assert(mask);
+	assert(bit < mask->bit_num);
+	data = mask->data;
+
+	bytes =  bit/8;
+	offset = bit % 8;
+
+	data += bytes;
+    return (*data & (1<<offset)) ? 1: 0;
+}
+
 static inline void longmask_bit_clr(longmask_t *mask, uint32_t bit)
 {
 	uint32_t bytes, offset;
 	uint8_t *data;
-	
+
 	assert(mask);
 	assert(bit < mask->bit_num);
 	data = mask->data;

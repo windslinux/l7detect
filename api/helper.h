@@ -7,8 +7,9 @@
 #include "log.h"
 
 #define align(x, a) (((x) + (a) - 1) & ~((a) - 1))
-
-/**                                                                                                                         
+#define minval(a,b) ((a) < (b) ? (a):(b))
+#define maxval(a,b) ((a) > (b) ? (a):(b))
+/**
  *@brief 交换a,b的值
 */
 #define swap(a, b) \
