@@ -52,7 +52,7 @@ typedef struct {
 
 typedef struct {
     uint32_t range_num;
-    range_t *ranges;/*相同的pattern，如果范围有重叠，可能有预想不到的后果，这个可能要深入dfa代码研究*/
+    range_t *ranges;
 } range_head_t;
 
 typedef struct pattern_head {
