@@ -15,6 +15,13 @@ typedef struct protobuf_node {
 	uint8_t buf_data[0];/*为了降低复杂性，目前只支持一个buffer*/
 } protobuf_node_t;
 
+typedef struct sub_data {
+    list_head_t list;
+    uint32_t ip;
+    uint16_t port;
+    uint16_t reserved;
+} sub_data_t;
+
 typedef struct proto_comm {
 	uint32_t app_id;
 	uint32_t debug;
@@ -23,6 +30,7 @@ typedef struct proto_comm {
     uint32_t thread_id;
 	longmask_t **match_mask;
     list_head_t *protobuf_head;/*用于跨包匹配的buf*/
+    list_head_t sub_data_head;/*plugin产生的sub flow信息*/
 } proto_comm_t;
 
 static inline protobuf_node_t *protobuf_find(list_head_t *head, uint32_t engine_id)

@@ -14,6 +14,8 @@
 tag_hd_t *pktag_hd_p;
 static zone_t *packet_zone;
 extern module_hd_t *module_hd_p;
+extern meta_hd_t **meta_hd_pp;
+
 void worker_thread_process(void *data)
 {
     packet_t *packet;
@@ -21,15 +23,20 @@ void worker_thread_process(void *data)
     assert(data);
 
     packet = (packet_t *)data;
+    packet->meta_hd = meta_hd_pp[sys_thread_id_get()];
+
+    assert(packet->meta_hd != NULL);
 
     packet->flag &= ~PKT_HANDLE_MASK;/*清理上次的结果*/
     module_list_process(module_hd_p, pktag_hd_p, packet->pktag, packet);
     if (packet->flag & PKT_LOOP_NEXT) {
        threadpool_add_task(tp, worker_thread_process, packet, 0);
     } else if (packet->flag & PKT_DONT_FREE) {
+            meta_buffer_sys_clear(packet->meta_hd);
     } else {
         do {
             next = packet->next_packet;
+            meta_buffer_sys_clear(packet->meta_hd);
             zone_free(packet_zone, packet);
             packet = next;
         } while (packet != NULL);
@@ -55,6 +62,7 @@ void process_loop(module_hd_t *module_head)
             do {
                 packet = (void *)zone_alloc(packet_zone, 0);
             } while(packet == NULL);
+
             tag_id = recv->ops->process(recv, packet);
             if (tag_id > 0) {
                 assert(packet->data);
