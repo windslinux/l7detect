@@ -22,6 +22,7 @@
 #include "process.h"
 #include "hash_table.h"
 #include "decap.h"
+#include "ff_table.h"
 
 #define INC_CNT(count) count++
 
@@ -68,7 +69,7 @@ typedef struct session_index {
 	uint32_t hash:24;
 } session_index_t;
 
-typedef struct session_item {
+struct session_item {
 	session_index_t index;
 	flow_item_t flow[2];		/**< [0]为上行流，[1]为下行流 */
     packet_t *packet;           /**< 包缓存，用来处理dirty的情况*/
@@ -87,7 +88,7 @@ typedef struct session_item {
 	uint32_t app_type;			/**<  协议小类*/
 	uint32_t app_state;         /**< 协议识别状态*/
 	list_head_t protobuf_head;
-}session_item_t;
+};
 
 typedef uint32_t (*hash_func)(session_index_t *info);
 
@@ -97,6 +98,7 @@ typedef struct info_global {
     session_conf_t *conf;
 	sf_proto_conf_t *sf_conf;
 	hash_table_hd_t *session_table;
+	hash_table_hd_t *ff_table;
 	log_t *log_c;
     struct {
         pthread_t tid;
@@ -111,6 +113,7 @@ typedef struct info_global {
 typedef struct info_local {
 	packet_t *packet;
 	session_item_t *session;	    /**< 流表中找到的表项*/
+    ff_item_t *ff_item;
 	session_index_t index_cache;	/**< 临时的session cache，减小每次进入函数堆栈分配的开销 */
 	session_frm_stats_t stats;
 	proto_comm_t proto_buf;        /**< 用于处理时传递上一次的数据给sf_plugin */
@@ -417,12 +420,13 @@ static void __session_table_clear(hash_table_hd_t *session_table)
 	}
 }
 
+
 static int32_t session_frm_init_global(module_info_t *this)
 {
     info_global_t *info;
     session_conf_t *conf;
 	sf_proto_conf_t *sf_conf;
-    hash_table_hd_t *session_table;
+    hash_table_hd_t *session_table, *ff_table;
 	uint32_t i;
     int rv;
 
@@ -446,7 +450,11 @@ static int32_t session_frm_init_global(module_info_t *this)
 	session_table = hash_table_init(conf->bucket_num, SPINLOCK);
 	assert(session_table);
 
+    ff_table = ff_table_init(conf->ff_bucket_num);
+    assert(ff_table);
+
     info->session_table = session_table;
+    info->ff_table = ff_table;
     info->conf = conf;
     info->sf_conf = sf_conf;
 
@@ -606,9 +614,30 @@ static int32_t session_frm_process(module_info_t *this, void *data)
             packet->pktag = next_stage_tag;
         }
     } else {
+        ff_item_t *ff;
+        uint32_t ff_hash;
         /*注意dirty位加的位置*/
         session->flag |= SESSION_DIRTY;
-	    packet->pktag = sf_plugin_tag;
+
+        ff_hash = ff_table_hash(gp->ff_table, session->index.ip[0], session->index.port[0]);
+        ff_table_lock(gp->ff_table, ff_hash);
+        ff = ff_table_search(gp->ff_table, ff_hash, session->index.ip[0], session->index.port[0]);
+        if (ff == NULL) {
+            ff_table_unlock(gp->ff_table, ff_hash);
+            ff_hash = ff_table_hash(gp->ff_table, session->index.ip[1], session->index.port[1]);
+            ff_table_lock(gp->ff_table, ff_hash);
+            ff = ff_table_search(gp->ff_table, ff_hash, session->index.ip[1], session->index.port[1]);
+        }
+        if (ff == NULL) {
+            ff_table_unlock(gp->ff_table, ff_hash);
+	        packet->pktag = sf_plugin_tag;
+        } else {
+            /*这里不应该去访问父流，否则在删除时会有锁的问题，比较难解决*/
+            /*set session variable and release ff_table lock*/
+            session->app_type = ff->app_type;
+            ff_table_unlock(gp->ff_table, ff_hash);
+            __session_return_handle(lp, packet, session);
+        }
     }
 	hash_table_unlock(hd, hash, 0);
 	return packet->pktag;

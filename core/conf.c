@@ -563,6 +563,10 @@ static session_conf_t *__session_conf_read(lua_State *L)
                                             (int *)&session_conf->bucket_num);
     assert(status == 0);
 
+    status = __value_set_num_from_lua_table(L, "session_config", "ff_bucket_num",
+                                            (int *)&session_conf->ff_bucket_num);
+    assert(status == 0);
+
     status = __value_set_num_from_lua_table(L, "session_config", "session_expire_time",
                                             (int *)&session_conf->session_expire_time);
     assert(status == 0);

@@ -42,6 +42,7 @@ typedef struct common_data_head {
 
 typedef struct session_conf {
 	uint32_t bucket_num;
+    uint32_t ff_bucket_num;
 	uint32_t session_expire_time;
 	char *hash_name;
 	char *session_logname;
