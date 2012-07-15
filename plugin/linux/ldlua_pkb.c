@@ -12,6 +12,7 @@ LDLUA_METHOD pkb_gc(lua_State *L);
 //LDLUA_METHOD pkb_tostring(lua_State *);
 LDLUA_METHOD pkbrange_uintbe(lua_State* L);
 LDLUA_METHOD pkbrange_uintle(lua_State* L);
+LDLUA_METHOD pkbrange_string(lua_State* L);
 LDLUA_METHOD pkbrange_gc(lua_State *L);
 LDLUA_METHOD pkb_debug(lua_State *L);
 LDLUA_CLASS_DEFINE(pkb,FAIL_ON_NULL("expired pkb"),NOP);
@@ -28,7 +29,6 @@ static const luaL_reg pkb_methods[] = {
 
 static const luaL_reg pkb_meta[] = {
     {"__call", pkb_range},
-//    {"__tostring", pkb_tostring},
     {"__gc", pkb_gc},
     { NULL, NULL },
 };
@@ -36,6 +36,7 @@ static const luaL_reg pkb_meta[] = {
 static const luaL_reg pkbrange_methods[] = {
 	{"uintbe", pkbrange_uintbe},
 	{"uintle", pkbrange_uintle},
+    {"string", pkbrange_string},
 	{NULL, NULL},
 };
 static const luaL_reg pkbrange_meta[] = {
@@ -82,6 +83,23 @@ LDLUA_METHOD pkb_index(lua_State* L)
 	}
 	app_data = (uint8_t *)(pkt->data + pkt->app_offset + index);
 	lua_pushnumber(L, *app_data);
+	return 1;
+}
+
+LDLUA_METHOD pkbrange_string(lua_State* L)
+{
+	pkbrange pkbr = check_pkbrange(L, 1);
+	pkb packet;
+	int offset;
+	void *app_data;
+	if (!(pkbr && pkbr->pkt)) {
+		return 0;
+	}
+
+	packet = pkbr->pkt;
+	offset = pkbr->offset;
+	app_data = packet->data + packet->app_offset;
+    lua_pushstring(L, (const char *)(app_data + offset));
 	return 1;
 }
 

@@ -2,7 +2,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include "ff_table.h"
-
+#define FF_TABLE_CHECK
 static int32_t __ff_item_compare(void *this, void *user_data, void *table)
 {
     ff_item_t *this_item, *table_item;
@@ -64,3 +64,23 @@ int32_t ff_table_delete(hash_table_hd_t* hd, uint32_t hash, ff_item_t *ff)
     }
     return 0;
 }
+
+int32_t ff_table_fini(hash_table_hd_t *hd)
+{
+    int32_t status = 0;
+#ifdef FF_TABLE_CHECK
+    uint32_t i;
+    ff_item_t *item;
+
+    for (i=0; i<hd->bucket_num; i++) {
+        hash_table_one_bucket_for_each(hd, i, item) {
+            log_error(syslog_p, "unclean item in ff_table, hash %d, ip 0x%x, port %d\n", i,
+                    item->ip, item->port);
+            status = -NOT_CLEAR_ERROR;
+        }
+    }
+#endif
+    hash_table_fini(&hd);
+    return status;
+}
+

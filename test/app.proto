@@ -1,8 +1,9 @@
 gstate = {init=0, s1=1, s2=2, s3=3, s4=4, s5=5, s6=6, s7=7, s8=8, final=9}
 --lde引擎是顺序匹配，顺序由proto_list决定
 proto_list={"test", "ppstream", "qqlive", "http", "dns", "ssl", "nat",
-			"sametime", "qq_file", "ssh"}
+			"sametime", "qq_file", "ssh", "ftp", "ftp_pd", "ftp_ad"}
 engine_list={"pde", "sde", "lde"}
+analysis_engine_list = {"ccde"}
 pkb_dir = {up=1, down=2}
 
 sde={}
@@ -116,6 +117,12 @@ sametime.pde = "tcp/1533"
 
 ssh = {}
 ssh.pde = "tcp/22"
+
+ftp = {}
+ftp.pde = "tcp/21"
+ftp.cdde =  {
+                if (buf(0, 4).string() == "PORT") then
+            }
 
 --print(qq_talk.sde[1][-1])
 --[[for k, v in pairs(qq_chat)
