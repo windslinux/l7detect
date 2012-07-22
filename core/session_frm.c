@@ -81,6 +81,7 @@ struct session_item {
 #define SESSION_INDEX_DNSTREAM PKT_DIR_DNSTREAM
 #define SESSION_DIR_MASK 0x3
 #define SESSION_DIRTY 0x10
+#define SESSION_NO_TIMEOUT 0x20
 	uint16_t flag:14;
 	uint16_t stage;
 	uint64_t id;
@@ -323,6 +324,7 @@ static inline void __session_return_handle(info_local_t *this, packet_t *packet,
 }
 
 static inline uint32_t __post_parsed(info_local_t *this, hash_table_hd_t *hd,
+                                     hash_table_hd_t *ff_hd,
                                      proto_comm_t *comm,  uint32_t final_state)
 {
     packet_t *packet;
@@ -332,12 +334,36 @@ static inline uint32_t __post_parsed(info_local_t *this, hash_table_hd_t *hd,
     packet = this->packet;
 
     hash_table_lock(hd, session->index.hash, 0);
+	session->app_type = packet->app_type;
 	if (comm->state == final_state) {
-		session->app_type = packet->app_type;
 		/*do some clean things*/
+        session->flag &= ~ SESSION_NO_TIMEOUT;
 		protobuf_destroy(&session->protobuf_head);
 	} else if (comm->state != session->app_state) {
 		/*save status*/
+        if (session->app_type != INVALID_PROTO_ID) {
+            /*已经识别协议，在分析阶段*/
+            meta_info_t *meta;
+            meta = meta_buffer_item_get(packet->meta_hd, NULL, META_TYPE_FF);
+            if (meta != NULL) {
+                meta_ff_t *ff;
+                ff_item_t *item;
+                uint32_t hash;
+
+                ff = (meta_ff_t *)meta_buffer_item_get_data(packet->meta_hd, meta);
+                if (ff != NULL)  {
+                    printf("add ip 0x%x, port %x\n", ff->ip, ff->port);
+                    hash = ff_table_hash(ff_hd, ff->ip, ff->port);
+                    ff_table_lock(ff_hd, hash);
+                    item = ff_table_insert(ff_hd, session, hash, ff->ip, ff->port, ff->app_type);
+                    if (item == NULL) {
+                        log_error(syslog_p, "ff_table insert error!\n");
+                    }
+                    ff_table_unlock(ff_hd, hash);
+                }
+            }
+        }
+        session->flag |= SESSION_NO_TIMEOUT;
 		session->app_state = comm->state;
         /*mask在sf_plugin模块中已经被修改*/
 	}
@@ -554,7 +580,7 @@ static int32_t session_frm_process(module_info_t *this, void *data)
 
 	if (packet->pktag == parsed_tag) {
 		assert(comm);
-		return __post_parsed(lp, hd, comm, gp->sf_conf->final_state);
+		return __post_parsed(lp, hd, gp->ff_table, comm, gp->sf_conf->final_state);
 	}
 
 	if (!(packet->prot_types[packet->prot_depth-2] == DPI_PROT_IPV4)) {

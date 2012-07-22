@@ -3,7 +3,7 @@ dirstack_$(sp)  :=  $(d)
 d               :=  $(dir)
 
 #  component specification
-LIBS_NAME := pde_engine.so lde_engine.so sde_engine.so
+LIBS_NAME := pde_engine.so lde_engine.so sde_engine.so cdde_engine.so
 
 pde_engine.so-OBJS := pde_engine.o engine_comm.o
 pde_engine.so-FLAGS := -fPIC
@@ -15,6 +15,10 @@ sde_engine.so-LDFLAG := -lsnort_dfa
 lde_engine.so-OBJS := lde_engine.o ldlua_register.o ldlua_pkb.o engine_comm.o ldlua_session.o
 lde_engine.so-FLAGS := -I L$(LIBLUA_DIR)/include -fPIC
 lde_engine.so-LDFLAG := -L$(LIBLUA_DIR)/lib -llua
+
+cdde_engine.so-OBJS := cdde_engine.o ldlua_register.o ldlua_pkb.o ldlua_meta.o engine_comm.o ldlua_session.o
+cdde_engine.so-FLAGS := -I L$(LIBLUA_DIR)/include -fPIC
+cdde_engine.so-LDFLAG := -L$(LIBLUA_DIR)/lib -llua
 
 OBJS_NAME := $(foreach obj, $(addsuffix -OBJS,$(LIBS_NAME)), $($(obj)))
 

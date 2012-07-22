@@ -30,7 +30,7 @@ uint32_t ff_table_hash(hash_table_hd_t* hd, uint32_t ip, uint16_t port)
     return (ip ^ port ^ 0x13570000) & hd->bucket_num;
 }
 
-ff_item_t *ff_table_insert(hash_table_hd_t* hd, session_item_t *parent, uint32_t hash, uint32_t ip, uint16_t port)
+ff_item_t *ff_table_insert(hash_table_hd_t* hd, session_item_t *parent, uint32_t hash, uint32_t ip, uint16_t port, uint32_t app_type)
 {
     ff_item_t *ff;
 
@@ -39,6 +39,7 @@ ff_item_t *ff_table_insert(hash_table_hd_t* hd, session_item_t *parent, uint32_t
         ff->ip = ip;
         ff->port = port;
         ff->parent = parent;
+        ff->app_type = app_type;
     }
     return ff;
 }

@@ -30,7 +30,6 @@ typedef struct proto_comm {
     uint32_t thread_id;
 	longmask_t **match_mask;
     list_head_t *protobuf_head;/*用于跨包匹配的buf*/
-    list_head_t sub_data_head;/*plugin产生的sub flow信息*/
 } proto_comm_t;
 
 static inline protobuf_node_t *protobuf_find(list_head_t *head, uint32_t engine_id)

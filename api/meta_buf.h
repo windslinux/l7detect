@@ -1,13 +1,11 @@
 #ifndef __META_BUF_H__
 #define __META_BUF_H__
 
+#include "meta_type.h"
+
 #define MAX_META_BUFFER_SIZE 2048
 #define MAX_META_SIZE 256
 
-enum {
-	META_TYPE_FF_FLOW_IP,
-	META_TYPE_FF_FLOW_PORT,
-};
 
 typedef struct meta_info {
 	uint8_t type; /*最多有64中类型的元数据*/

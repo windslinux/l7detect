@@ -22,7 +22,7 @@ typedef struct ff_item {
 uint32_t ff_table_hash(hash_table_hd_t *hd, uint32_t ip, uint16_t port);
 hash_table_hd_t *ff_table_init(uint32_t bucket_num);
 ff_item_t *ff_table_search(hash_table_hd_t* hd, uint32_t hash, int32_t ip, int16_t port);
-ff_item_t *ff_table_insert(hash_table_hd_t* hd, session_item_t *parent, uint32_t hash, uint32_t ip, uint16_t port);
+ff_item_t *ff_table_insert(hash_table_hd_t* hd, session_item_t *parent, uint32_t hash, uint32_t ip, uint16_t port, uint32_t app_type);
 
 int32_t ff_table_delete(hash_table_hd_t* hd, uint32_t hash, ff_item_t *ff);
 int32_t ff_table_fini(hash_table_hd_t *hd);

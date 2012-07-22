@@ -99,7 +99,7 @@ LDLUA_METHOD pkbrange_string(lua_State* L)
 	packet = pkbr->pkt;
 	offset = pkbr->offset;
 	app_data = packet->data + packet->app_offset;
-    lua_pushstring(L, (const char *)(app_data + offset));
+    lua_pushlstring(L, (const char *)(app_data + offset), pkbr->length);
 	return 1;
 }
 
@@ -189,6 +189,9 @@ LDLUA_METHOD pkbrange_uintbe(lua_State* L)
 	case 2:
 		lua_pushnumber(L, htons(*(uint16_t *)(app_data + offset)));
 		return 1;
+    case 3:
+		lua_pushnumber(L, htonl(*(uint32_t *)(app_data + offset)));
+		return 1;
 	case 4:
 		lua_pushnumber(L, htonl(*(uint32_t *)(app_data + offset)));
 		return 1;
@@ -219,6 +222,9 @@ LDLUA_METHOD pkbrange_uintle(lua_State* L)
 		return 1;
 	case 2:
 		lua_pushnumber(L, (*(uint16_t *)(app_data + offset)));
+		return 1;
+	case 3:
+		lua_pushnumber(L, (*(uint32_t *)(app_data + offset)));
 		return 1;
 	case 4:
 		lua_pushnumber(L, (*(uint32_t *)(app_data + offset)));

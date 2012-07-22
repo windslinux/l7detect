@@ -7,5 +7,5 @@ void ldlua_register_classes(lua_State* L)
 }
 void ldlua_register_functions(lua_State* L)
 {
-	
+
 }

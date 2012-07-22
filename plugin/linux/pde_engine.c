@@ -196,13 +196,14 @@ static int32_t pde_engine_process(module_info_t *this, void *data)
 	/*处理上一个引擎发过来的mask*/
 	longmask_op_and(proto_comm->match_mask[info->pde_engine_id], info->pde_table[proto_index][port]);
 	app_id = handle_engine_mask(conf, proto_comm->match_mask[info->pde_engine_id],
-								proto_comm->match_mask, info->pde_engine_id,
-								&tag, 1);
+                                CS_ENG_TYPE, proto_comm->match_mask,
+                                info->pde_engine_id, &tag, 1);
 	longmask_all_clr(proto_comm->match_mask[info->pde_engine_id]);
 
 	if (app_id < 0) {
 		/*处理本引擎开始的mask*/
-		app_id = handle_engine_mask(conf, info->pde_table[proto_index][port], proto_comm->match_mask,
+		app_id = handle_engine_mask(conf, info->pde_table[proto_index][port],
+                                    CS_ENG_TYPE, proto_comm->match_mask,
 									info->pde_engine_id, &tag, 0);
 	}
 	if (app_id >= 0) {

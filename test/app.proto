@@ -2,9 +2,13 @@ gstate = {init=0, s1=1, s2=2, s3=3, s4=4, s5=5, s6=6, s7=7, s8=8, final=9}
 --lde引擎是顺序匹配，顺序由proto_list决定
 proto_list={"test", "ppstream", "qqlive", "http", "dns", "ssl", "nat",
 			"sametime", "qq_file", "ssh", "ftp", "ftp_pd", "ftp_ad"}
-engine_list={"pde", "sde", "lde"}
-analysis_engine_list = {"ccde"}
+cs_eng_list={"pde", "sde", "lde"} --协议初步识别引擎
+as_eng_list={"cdde"}  --协议进一步识别引擎
 pkb_dir = {up=1, down=2}
+
+proto_list_index = {}
+cs_eng_list_index = {}
+as_eng_list_index = {}
 
 sde={}
 sde.conf = {
@@ -118,12 +122,62 @@ sametime.pde = "tcp/1533"
 ssh = {}
 ssh.pde = "tcp/22"
 
+
 ftp = {}
 ftp.pde = "tcp/21"
-ftp.cdde =  {
-                if (buf(0, 4).string() == "PORT") then
-            }
+ftp.cdde = function(buf, session, meta)
+           if (buf:len() >= 4 and buf(0, 4):string() == "PORT") then
+               local j = 5
+               local ip, port
+               ip, j = get_ftp_active_code(buf, j, 4)
+               port, j = get_ftp_active_code(buf, j, 2)
+                                            print("ip=".. ip .. ".. port=".. port)
+               meta:add_ff(ip, port, proto_list_index["ftp_ad"])
+           end
+              return gstate.s2
+           end
 
+--[[ftp_pd = {}
+ftp_pd.pde = "tcp/20"
+]]
+
+function get_ftp_active_code(buf, j, bytes)
+    local prev, i
+    local value, v, b
+    value = 0
+    for i=1, bytes do
+        len = 0
+        prev = j
+        b = buf:getbyte(j)
+        v = 0
+        while (b ~= 0x2c and b ~= 0x0d) do
+            j = j + 1
+            v = v * 10 + b - 0x30;
+            b = buf:getbyte(j)
+        end
+        for k=1, bytes-i do
+            v = v * 256
+        end
+        value = value + v
+        j = j + 1
+    end
+    return value, j
+end
+
+function reverse(obj, revobj)
+    local k, v
+    for k,v in pairs(obj) do
+        revobj[v] = k
+    end
+end
+
+function init()
+    reverse(proto_list, proto_list_index)
+    reverse(cs_eng_list, cs_eng_list_index)
+    reverse(as_eng_list, as_eng_list_index)
+end
+
+init()
 --print(qq_talk.sde[1][-1])
 --[[for k, v in pairs(qq_chat)
 do

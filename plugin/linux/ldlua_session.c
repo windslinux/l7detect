@@ -15,7 +15,7 @@ LDLUA_METHOD session_state(lua_State *L);
 
 LDLUA_CLASS_DEFINE(session,FAIL_ON_NULL("expired session"),NOP);
 
-extern uint32_t lde_engine_id;
+extern uint32_t lde_engine_id;/*现在和session相关的都是存放在lde的buffer里，需要改进*/
 
 static const luaL_reg session_methods[] = {
 	{"savenum", session_savenum},
