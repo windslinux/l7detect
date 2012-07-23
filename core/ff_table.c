@@ -41,12 +41,19 @@ ff_item_t *ff_table_insert(hash_table_hd_t* hd, session_item_t *parent, uint32_t
         ff->parent = parent;
         ff->app_type = app_type;
     }
-    return ff;
+    if (hash_table_insert(hd, hash, ff) == 0) {
+        return ff;
+    } else {
+        free(ff);
+        return NULL;
+    }
 }
 
 ff_item_t *ff_table_search(hash_table_hd_t* hd, uint32_t hash, int32_t ip, int16_t port)
 {
     ff_item_t this, *ff;
+    this.ip = ip;
+    this.port = port;
     ff = hash_table_search(hd, hash, NULL, __ff_item_compare, &this, NULL);
     return ff;
 }

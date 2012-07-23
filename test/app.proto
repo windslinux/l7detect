@@ -131,7 +131,6 @@ ftp.cdde = function(buf, session, meta)
                local ip, port
                ip, j = get_ftp_active_code(buf, j, 4)
                port, j = get_ftp_active_code(buf, j, 2)
-                                            print("ip=".. ip .. ".. port=".. port)
                meta:add_ff(ip, port, proto_list_index["ftp_ad"])
            end
               return gstate.s2
@@ -167,7 +166,7 @@ end
 function reverse(obj, revobj)
     local k, v
     for k,v in pairs(obj) do
-        revobj[v] = k
+        revobj[v] = k-1
     end
 end
 

@@ -4,6 +4,7 @@
 #include <common.h>
 
 enum {
+    META_TYPE_INVALID,
 	META_TYPE_FF, /*type:meta_ff_t*/
 };
 

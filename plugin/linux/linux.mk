@@ -43,7 +43,7 @@ CLEAN_LIST += $(DYNLIBS) *~
 $(OBJ_DIR)/%.o: $(d)/%.c
 	$(COMPILE)
 
-$(DYNLIB):$(addprefix $(OBJ_DIR)/,$($(notdir $(DYNLIB))-OBJS))
+$(DYNLIB):$(addprefix $(OBJ_DIR)/,$($(notdir $(DYNLIB))-OBJS)) $(TOP)/build/obj/libapi.a
 	$(CC) -fPIC -shared -o $@ $(addprefix $(OBJ_DIR)/,$($(notdir $(DYNLIB))-OBJS)) $($(notdir $(DYNLIB))-LDFLAG) -L$(TOP)/build/obj/ -lapi
 
 #  standard component Makefile footer

@@ -339,7 +339,7 @@ static inline uint32_t __post_parsed(info_local_t *this, hash_table_hd_t *hd,
 		/*do some clean things*/
         session->flag &= ~ SESSION_NO_TIMEOUT;
 		protobuf_destroy(&session->protobuf_head);
-	} else if (comm->state != session->app_state) {
+	} else {
 		/*save status*/
         if (session->app_type != INVALID_PROTO_ID) {
             /*已经识别协议，在分析阶段*/
@@ -352,18 +352,20 @@ static inline uint32_t __post_parsed(info_local_t *this, hash_table_hd_t *hd,
 
                 ff = (meta_ff_t *)meta_buffer_item_get_data(packet->meta_hd, meta);
                 if (ff != NULL)  {
-                    printf("add ip 0x%x, port %x\n", ff->ip, ff->port);
                     hash = ff_table_hash(ff_hd, ff->ip, ff->port);
                     ff_table_lock(ff_hd, hash);
                     item = ff_table_insert(ff_hd, session, hash, ff->ip, ff->port, ff->app_type);
                     if (item == NULL) {
                         log_error(syslog_p, "ff_table insert error!\n");
+                    } else {
+                        item->next = session->sub_ff;
+                        session->sub_ff = item;
                     }
                     ff_table_unlock(ff_hd, hash);
                 }
             }
+            session->flag |= SESSION_NO_TIMEOUT;
         }
-        session->flag |= SESSION_NO_TIMEOUT;
 		session->app_state = comm->state;
         /*mask在sf_plugin模块中已经被修改*/
 	}
@@ -653,7 +655,7 @@ static int32_t session_frm_process(module_info_t *this, void *data)
 
 	__update_session_count(session, packet);
     session->packet = packet;
-    if (session->app_type != INVALID_PROTO_ID) {
+    if (session->app_type != INVALID_PROTO_ID && (session->app_state == gp->sf_conf->final_state)) {
         if (packet->flag & PKT_DONT_FREE) {
             /*这种情况的检查主要是由于前一个数据包已经查出协议特征，而当前的数据包到达这个地方的时候，
              * 有可能会话中还有未被处理的数据包，因此不能简单返回，还要检查一下*/
@@ -663,32 +665,35 @@ static int32_t session_frm_process(module_info_t *this, void *data)
             packet->pktag = next_stage_tag;
         }
     } else {
-        ff_item_t *ff;
-        uint32_t ff_hash;
-        /*注意dirty位加的位置*/
         session->flag |= SESSION_DIRTY;
+        /*注意dirty位加的位置*/
+	    packet->pktag = sf_plugin_tag;
+        if (session->app_type == INVALID_PROTO_ID) {
+            ff_item_t *ff;
+            uint32_t ff_hash;
 
-        ff_hash = ff_table_hash(gp->ff_table, session->index.ip[0], session->index.port[0]);
-        ff_table_lock(gp->ff_table, ff_hash);
-        ff = ff_table_search(gp->ff_table, ff_hash, session->index.ip[0], session->index.port[0]);
-        if (ff == NULL) {
-            ff_table_unlock(gp->ff_table, ff_hash);
-            ff_hash = ff_table_hash(gp->ff_table, session->index.ip[1], session->index.port[1]);
+            ff_hash = ff_table_hash(gp->ff_table, session->index.ip[0], session->index.port[0]);
             ff_table_lock(gp->ff_table, ff_hash);
-            ff = ff_table_search(gp->ff_table, ff_hash, session->index.ip[1], session->index.port[1]);
-        }
-        if (ff == NULL) {
-            ff_table_unlock(gp->ff_table, ff_hash);
-	        packet->pktag = sf_plugin_tag;
-        } else {
-            /*这里不应该去访问父流，否则在删除时会有锁的问题，比较难解决*/
-            /*set session variable and release ff_table lock*/
-            session->app_type = ff->app_type;
-            ff_table_unlock(gp->ff_table, ff_hash);
-            __session_return_handle(lp, packet, session);
+            ff = ff_table_search(gp->ff_table, ff_hash, session->index.ip[0], session->index.port[0]);
+            if (ff == NULL) {
+                ff_table_unlock(gp->ff_table, ff_hash);
+                ff_hash = ff_table_hash(gp->ff_table, session->index.ip[1], session->index.port[1]);
+                ff_table_lock(gp->ff_table, ff_hash);
+                ff = ff_table_search(gp->ff_table, ff_hash, session->index.ip[1], session->index.port[1]);
+            }
+            if (ff == NULL) {
+                ff_table_unlock(gp->ff_table, ff_hash);
+            } else {
+                /*这里不应该去访问父流，否则在删除时会有锁的问题，比较难解决*/
+                /*set session variable and release ff_table lock*/
+                session->app_type = ff->app_type;
+                session->app_state = gp->sf_conf->final_state;
+                ff_table_unlock(gp->ff_table, ff_hash);
+                __session_return_handle(lp, packet, session);
+            }
         }
     }
-	hash_table_unlock(hd, hash, 0);
+    hash_table_unlock(hd, hash, 0);
 	return packet->pktag;
 failed:
 	INC_CNT(stats->session_failed);

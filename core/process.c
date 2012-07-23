@@ -24,9 +24,9 @@ void worker_thread_process(void *data)
 
     packet = (packet_t *)data;
     packet->meta_hd = meta_hd_pp[sys_thread_id_get()];
-
     assert(packet->meta_hd != NULL);
 
+    meta_buffer_sys_clear(packet->meta_hd);
     packet->flag &= ~PKT_HANDLE_MASK;/*清理上次的结果*/
     module_list_process(module_hd_p, pktag_hd_p, packet->pktag, packet);
     if (packet->flag & PKT_LOOP_NEXT) {
