@@ -138,7 +138,6 @@ LDLUA_METHOD pkb_len(lua_State* L)
 
 LDLUA_METHOD pkb_dir(lua_State* L)
 {
-	/* Obtain the length of a TVB */
     pkb pkt = check_pkb(L,1);
 
     if (!pkt) {

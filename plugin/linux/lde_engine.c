@@ -21,7 +21,7 @@ static int32_t lde_engine_fini_global(module_info_t *this);
 static int32_t lde_engine_fini_local(module_info_t *this, uint32_t thread_id);
 static log_t *pt_log;
 
-uint32_t lde_engine_id;
+static uint32_t lde_engine_id;
 
 module_ops_t lde_engine_ops = {
 	.init_global = lde_engine_init_global,
