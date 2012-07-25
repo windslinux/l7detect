@@ -148,7 +148,8 @@ static uint32_t hash_sum(session_index_t *index)
 static void __flow_timer_process(evutil_socket_t fd, short which, void *arg)
 {
     info_global_t *info;
-    hash_table_hd_t *hd;
+    hash_table_hd_t *hd, *ff_hd;
+    ff_item_t *ff_item;
     session_item_t *item;
     session_conf_t *conf;
     struct timeval current;
@@ -156,13 +157,14 @@ static void __flow_timer_process(evutil_socket_t fd, short which, void *arg)
 
     info = (info_global_t *)arg;
     hd = info->session_table;
+    ff_hd = info->ff_table;
     conf = info->conf;
     sys_get_time(&current);
 
     hash_table_lock(hd, info->timer.bucket, 0);
     hash_table_one_bucket_for_each(hd, info->timer.bucket, item) {
         if (sys_time_diff(item->last_time, current) >= conf->session_expire_time) {
-            if (item->flag & SESSION_DIRTY) {
+            if ((item->flag & SESSION_DIRTY) || (item->flag & SESSION_NO_TIMEOUT)) {
                 continue;
             }
             assert(item->packet == NULL);
@@ -171,11 +173,34 @@ static void __flow_timer_process(evutil_socket_t fd, short which, void *arg)
             if ((status = __free_item(hd, info->ff_table, info->timer.bucket, item)) != 0) {
                 log_error(syslog_p, "free item error, status %d\n", status);
             }
-        }
+        } else {
+            ff_item = item->sub_ff;
+            while (ff_item) {
+                uint32_t ip, ff_hash;
+                uint16_t port;
+                int32_t rv;
 
+                ff_item_t *current_item = ff_item;
+                ff_item = ff_item->next;
+                /*这里没有加锁就访问了，但在推出前，timer线程已经结束，这个时候剩余的ff_item将在session_clear中删除，因此是没有问题的*/
+                ip = current_item->ip;
+                port = current_item->port;
+                ff_hash = ff_table_hash(ff_hd, ip, port);
+                ff_table_lock(ff_hd, ff_hash);
+                if (sys_time_diff(ff_item->last_time, current) >= conf->session_expire_time) {
+                    rv = ff_table_delete(ff_hd, ff_hash, current_item);
+                    if (rv != 0) {
+            		    log_error(syslog_p, "remove ff_item error, status %d\n", rv);
+                    }
+                    item->sub_ff = ff_item;
+                }
+                ff_table_unlock(ff_hd, ff_hash);
+            }
+        }
     }
-    hash_table_unlock(hd, info->timer.bucket, 0);
+
     info->timer.bucket++;
+
     if (info->timer.bucket >= hd->bucket_num) {
         info->timer.bucket = 0;
     }
@@ -443,8 +468,9 @@ static int32_t __free_item(hash_table_hd_t *session_table, hash_table_hd_t *ff_t
 
         rv = ff_table_delete(ff_table, ff_hash, current);
         if (rv != 0) {
-		    log_error(syslog_p, "remove ff_item error, status %d\n", status);
+		    log_error(syslog_p, "remove ff_item error, status %d\n", rv);
         }
+        item->sub_ff = ff_item;
         ff_table_unlock(ff_table, ff_hash);
     }
 	protobuf_destroy(&item->protobuf_head);
@@ -558,6 +584,9 @@ static int32_t session_frm_process(module_info_t *this, void *data)
 	session_index_t *buf;
 	hash_table_hd_t *hd;
 	uint32_t hash;
+    meta_tuple_info_t tuple_info;
+    meta_info_t *m_info;
+
 	uint8_t swap_flag = 0;
 	int32_t status;
 	proto_comm_t *comm = NULL;
@@ -601,6 +630,14 @@ static int32_t session_frm_process(module_info_t *this, void *data)
 	buf->port[0] = ntohs(l4hdr->src_port);
 	buf->port[1] = ntohs(l4hdr->dst_port);
 	buf->protocol = iphdr->protocol;
+    m_info = meta_buffer_item_get(packet->meta_hd, NULL, META_TYPE_TUPLE_INFO);
+    if (m_info == NULL) {
+        tuple_info.sip = buf->ip[0];
+        tuple_info.dip = buf->ip[1];
+        tuple_info.sport = buf->port[0];
+        tuple_info.dport = buf->port[1];
+        tuple_info.protocol = buf->protocol;
+    }
 
 	if (buf->ip[0] > buf->ip[1]) {
 		swap(buf->ip[0], buf->ip[1]);
@@ -653,6 +690,15 @@ static int32_t session_frm_process(module_info_t *this, void *data)
 		packet->dir = session->dir;
 	}
 
+    if (m_info == NULL) {
+        int32_t v;
+
+        tuple_info.dir = packet->dir;
+        v = meta_buffer_item_add(packet->meta_hd, META_TYPE_TUPLE_INFO, &tuple_info, sizeof(tuple_info));
+        if (v != 0) {
+            log_error(syslog_p, "TUPLE_INFO add error!\n");
+        }
+    }
 	__update_session_count(session, packet);
     session->packet = packet;
     if (session->app_type != INVALID_PROTO_ID && (session->app_state == gp->sf_conf->final_state)) {

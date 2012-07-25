@@ -11,6 +11,7 @@ static int32_t __ff_item_compare(void *this, void *user_data, void *table)
     table_item = (ff_item_t *)table;
 
     if ((this_item->ip == table_item->ip) && (this_item->port == table_item->port)) {
+        sys_get_time(&table_item->last_time);
         return 0;
     } else {
         return 1;

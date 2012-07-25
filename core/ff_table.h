@@ -2,6 +2,7 @@
 #define __FF_TABLE__
 #include "common.h"
 #include "hash_table.h"
+#include "sys.h"
 
 typedef struct session_item session_item_t;
 
@@ -11,6 +12,7 @@ typedef struct ff_item {
     uint16_t reserved;
 	uint32_t app_type;			/**<  协议小类*/
 	uint32_t reserved2;
+	sys_time_t last_time;
     session_item_t *parent;
     struct ff_item *next;
 } ff_item_t;

@@ -1,7 +1,7 @@
 gstate = {init=0, s1=1, s2=2, s3=3, s4=4, s5=5, s6=6, s7=7, s8=8, final=9}
 --lde引擎是顺序匹配，顺序由proto_list决定
 proto_list={"test", "ppstream", "qqlive", "http", "dns", "ssl", "nat",
-			"sametime", "qq_file", "ssh", "ftp", "ftp_pd", "ftp_ad"}
+			"sametime", "qq_file", "ssh", "ftp", "ftp_data"}
 cs_eng_list={"pde", "sde", "lde"} --协议初步识别引擎
 as_eng_list={"cdde"}  --协议进一步识别引擎
 pkb_dir = {up=1, down=2}
@@ -132,19 +132,16 @@ ftp.cdde = function(buf, session, meta)
                     local ip, port
                     ip, j = get_ftp_active_code(buf, j, 4)
                     port, j = get_ftp_active_code(buf, j, 2)
-                    meta:add_ff(ip, port, proto_list_index["ftp_ad"] - 1) --lua的index从1开始
-                elseif (buf(0, 3):string() == "226") then
-                    --print("close")
-                    --return gstate.final
-                    return gstate.s2
+                    meta:add_ff(ip, port, proto_list_index["ftp_data"] - 1) --lua的index从1开始
+               elseif (buf(0, 3):string() == "226") then
+                    return gstate.final
                 end
            end
            return gstate.s2
            end
 
---[[ftp_pd = {}
-ftp_pd.pde = "tcp/20"
-]]
+ftp_data = {}
+ftp_data.pde = "tcp/20"
 
 function get_ftp_active_code(buf, j, bytes)
     local prev, i

@@ -6,6 +6,10 @@
 
 LDLUA_METHOD pkb_index(lua_State* L);
 LDLUA_METHOD pkb_range(lua_State* L);
+LDLUA_METHOD pkb_sip(lua_State* L);
+LDLUA_METHOD pkb_dip(lua_State* L);
+LDLUA_METHOD pkb_sport(lua_State* L);
+LDLUA_METHOD pkb_dport(lua_State* L);
 LDLUA_METHOD pkb_dir(lua_State* L);
 LDLUA_METHOD pkb_len(lua_State* L);
 LDLUA_METHOD pkb_gc(lua_State *L);
@@ -22,6 +26,10 @@ static const luaL_reg pkb_methods[] = {
     {"range", pkb_range},
     {"len", pkb_len},
 	{"getbyte", pkb_index},
+    {"sip", pkb_sip},
+    {"dip", pkb_dip},
+    {"sport", pkb_sport},
+    {"dport", pkb_dport},
 	{"dir", pkb_dir},
     {"debug", pkb_debug},
     { NULL, NULL },
@@ -134,6 +142,90 @@ LDLUA_METHOD pkb_len(lua_State* L)
 	}
     lua_pushnumber(L, __app_length(pkt));
     LDLUA_RETURN(1); /* The length of the pkt. */
+}
+
+LDLUA_METHOD pkb_sip(lua_State* L)
+{
+    pkb pkt = check_pkb(L,1);
+    meta_info_t *info;
+    meta_tuple_info_t *tuple;
+
+    if (!pkt) {
+		return 0;
+	}
+
+    info = meta_buffer_item_get(pkt->meta_hd, NULL, META_TYPE_TUPLE_INFO);
+    if (info != NULL) {
+        tuple = meta_buffer_item_get_data(pkt->meta_hd, info);
+        if (tuple != NULL) {
+            lua_pushnumber(L, tuple->sip);
+            LDLUA_RETURN(1);
+        }
+    }
+    LDLUA_RETURN(0);
+}
+
+LDLUA_METHOD pkb_dip(lua_State* L)
+{
+    pkb pkt = check_pkb(L,1);
+    meta_info_t *info;
+    meta_tuple_info_t *tuple;
+
+    if (!pkt) {
+		return 0;
+	}
+
+    info = meta_buffer_item_get(pkt->meta_hd, NULL, META_TYPE_TUPLE_INFO);
+    if (info != NULL) {
+        tuple = meta_buffer_item_get_data(pkt->meta_hd, info);
+        if (tuple != NULL) {
+            lua_pushnumber(L, tuple->dip);
+            LDLUA_RETURN(1);
+        }
+    }
+    LDLUA_RETURN(0);
+}
+
+LDLUA_METHOD pkb_sport(lua_State* L)
+{
+    pkb pkt = check_pkb(L,1);
+    meta_info_t *info;
+    meta_tuple_info_t *tuple;
+
+    if (!pkt) {
+		return 0;
+	}
+
+    info = meta_buffer_item_get(pkt->meta_hd, NULL, META_TYPE_TUPLE_INFO);
+    if (info != NULL) {
+        tuple = meta_buffer_item_get_data(pkt->meta_hd, info);
+        if (tuple != NULL) {
+            lua_pushnumber(L, tuple->sport);
+            LDLUA_RETURN(1);
+        }
+    }
+    LDLUA_RETURN(0);
+}
+
+LDLUA_METHOD pkb_dport(lua_State* L)
+{
+    pkb pkt = check_pkb(L,1);
+    meta_info_t *info;
+    meta_tuple_info_t *tuple;
+
+    if (!pkt) {
+		return 0;
+	}
+
+    info = meta_buffer_item_get(pkt->meta_hd, NULL, META_TYPE_TUPLE_INFO);
+    if (info != NULL) {
+        tuple = meta_buffer_item_get_data(pkt->meta_hd, info);
+        if (tuple != NULL) {
+            lua_pushnumber(L, tuple->dport);
+            LDLUA_RETURN(1);
+        }
+    }
+    LDLUA_RETURN(0);
 }
 
 LDLUA_METHOD pkb_dir(lua_State* L)
