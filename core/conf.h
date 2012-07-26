@@ -5,6 +5,7 @@
 #include "list.h"
 #include "lua_ci.h"
 #include "log.h"
+#include "helper.h"
 
 #define common_free_cb free
 #define ENGINE_NAME_LEN 10
@@ -20,6 +21,8 @@
 #define SDE_KEY_TOKEN   '|'
 #define SDE_KEY_RANGE_TOKEN '~'
 #define SDE_KEY_MAX_LEN 20
+#define MAX_ENGINE_TYPE 5
+
 enum {
 	MODE_NOT_SET,
 	MODE_LIVE,
@@ -42,6 +45,7 @@ typedef struct common_data_head {
 
 typedef struct session_conf {
 	uint32_t bucket_num;
+    uint32_t ff_bucket_num;
 	uint32_t session_expire_time;
 	char *hash_name;
 	char *session_logname;
@@ -49,7 +53,7 @@ typedef struct session_conf {
 
 typedef struct proto_conf {
 	char *name;
-	uint32_t engine_mask;
+	uint32_t engine_mask; /*一个协议只允许最多有32个引擎*/
 	common_data_head_t *engine_head;
 } proto_conf_t;
 
@@ -58,10 +62,17 @@ typedef struct detect_engine {
     common_data_head_t *conf;
 } detect_engine_t;
 
+typedef enum {
+    CS_ENG_TYPE,
+    AS_ENG_TYPE,
+} ENG_TYPE;
+
 typedef struct sf_proto_conf {
 	lua_State *L;
 	char *app_luabuf;
 	log_t *proto_log;
+    uint32_t engine_type_num[MAX_ENGINE_TYPE];
+    uint32_t engine_type_mask[MAX_ENGINE_TYPE];
 	uint32_t total_engine_num;
 	uint32_t total_proto_num;
 	uint32_t final_state;

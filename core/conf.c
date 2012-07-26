@@ -14,10 +14,12 @@ conf_t g_conf;
 #define DEFAULT_CONFIG_FILE_PATH "test/global.conf"
 #define READ_BUF_SIZE 1024
 #define PROTO_LIST_NAME "proto_list"
-#define ENGINE_LIST_NAME "engine_list"
-#define ENGINE_PDE_NAME "pde"
-#define ENGINE_SDE_NAME "sde"
 
+static kv_table_t etn_map[] = {
+    {"cs_eng_list", CS_ENG_TYPE},
+    {"as_eng_list", AS_ENG_TYPE},
+    {NULL, -1}
+};
 typedef struct conf_list {
 	list_head_t list;
 	char *name;
@@ -268,12 +270,8 @@ int32_t __proto_item_read(lua_State *L, char *proto_name, int index, sf_proto_co
 	int type;
 	proto_conf_t *p;
 
-	p = &conf->protos[index];
-
 	assert(conf->engines);
-	p->name = malloc(strlen(proto_name) + 1);
-	assert(p->name);
-	strcpy(p->name, proto_name);
+	p = &conf->protos[index];
 
 	p->engine_head = zmalloc(common_data_head_t *, sizeof(common_data_head_t) * conf->total_engine_num);
 	assert(p->engine_head);
@@ -306,10 +304,10 @@ sf_proto_conf_t *__proto_conf_read()
 {
 	sf_proto_conf_t *sf_conf;
 	int error;
-	int proto_num, total_engine_num;
+	int proto_num;
 	int i;
     lua_State *L;
-	uint32_t read_size;
+	uint32_t read_size, j, id;
 
     sf_conf = zmalloc(sf_proto_conf_t *, sizeof(sf_proto_conf_t));
 	assert(sf_conf);
@@ -334,27 +332,30 @@ sf_proto_conf_t *__proto_conf_read()
 		}
 	}
 
-	total_engine_num = ldlua_table_items_num(L, ENGINE_LIST_NAME);
-	assert(total_engine_num);
-	sf_conf->total_engine_num = total_engine_num;
-
+    for (i=0; i<MAX_ENGINE_TYPE && etn_map[i].key != NULL; i++) {
+	    sf_conf->engine_type_num[i] = ldlua_table_items_num(L, etn_map[i].key);
+        sf_conf->engine_type_mask[i] = ((1 << sf_conf->engine_type_num[i]) - 1) << sf_conf->total_engine_num;
+        sf_conf->total_engine_num += sf_conf->engine_type_num[i];
+    }
 	sf_conf->final_state = ldlua_table_key_get_num(L, "gstate", "final");
 	assert(sf_conf->final_state);
 
-	sf_conf->engines = zmalloc(detect_engine_t *, total_engine_num * sizeof(detect_engine_t));
+	sf_conf->engines = zmalloc(detect_engine_t *, sf_conf->total_engine_num * sizeof(detect_engine_t));
 	assert(sf_conf->engines);
 
-	for (i=1; i<=total_engine_num; i++) {
-		char *p;
-		p = ldlua_table_raw_get_string(L, ENGINE_LIST_NAME, i);
-		assert(strlen(p) <= ENGINE_NAME_LEN);
-		strcpy(sf_conf->engines[i-1].name, p);
-        sf_conf->engines[i-1].conf = zmalloc(common_data_head_t *, sizeof(common_data_t));
-        assert(sf_conf->engines[i-1].conf);
-        LIST_HEAD_INIT(&sf_conf->engines[i-1].conf->list);
+    for (i=0, id=0; i<MAX_ENGINE_TYPE && etn_map[i].key != NULL; i++) {
+	    for (j=1; j<=sf_conf->engine_type_num[i]; j++, id++) {
+		    char *p;
+    		p = ldlua_table_raw_get_string(L, etn_map[i].key, j);
+	    	assert(strlen(p) <= ENGINE_NAME_LEN);
+		    strcpy(sf_conf->engines[id].name, p);
+            sf_conf->engines[id].conf = zmalloc(common_data_head_t *, sizeof(common_data_t));
+            assert(sf_conf->engines[id].conf);
+            LIST_HEAD_INIT(&sf_conf->engines[id].conf->list);
 
-        assert(__engines_conf_read(L, p, sf_conf->engines[i-1].conf) == 0);
-	}
+            assert(__engines_conf_read(L, p, sf_conf->engines[id].conf) == 0);
+	    }
+    }
 
 	proto_num = ldlua_table_items_num(L, PROTO_LIST_NAME);
 	assert(proto_num);
@@ -364,8 +365,15 @@ sf_proto_conf_t *__proto_conf_read()
 	for (i=1; i<=proto_num; i++) {
 		char *proto_name;
 		proto_name = ldlua_table_raw_get_string(L, PROTO_LIST_NAME, i);
+
 		if (proto_name) {
-			__proto_item_read(L, proto_name, i-1, sf_conf);
+    	    sf_conf->protos[i-1].name = malloc(strlen(proto_name) + 1);
+	        assert(sf_conf->protos[i-1].name);
+	        strcpy(sf_conf->protos[i-1].name, proto_name);
+
+            if (ldlua_has_table(L, proto_name)) {
+			    __proto_item_read(L, proto_name, i-1, sf_conf);
+            }
 		} else {
 			err_print("item %d type error, %s\n",
 					  i, lua_typename(L, lua_type(L, -1)));
@@ -391,6 +399,9 @@ void __proto_conf_show(sf_proto_conf_t *conf)
 	print("total_proto_num=%d\n", conf->total_proto_num);
 	for (i=0; i<conf->total_proto_num; i++) {
 		print("\tname:%s,engine_mask:%d\n", conf->protos[i].name, conf->protos[i].engine_mask);
+        if (conf->protos[i].engine_mask == 0) {
+            continue;
+        }
 		for (j=0; j<conf->total_engine_num; j++) {
 			print("\t\tengine:%s, type:%d\n", conf->engines[j].name,
 				  conf->protos[i].engine_head[j].lua_type);
@@ -561,6 +572,10 @@ static session_conf_t *__session_conf_read(lua_State *L)
 
     status = __value_set_num_from_lua_table(L, "session_config", "bucket_num",
                                             (int *)&session_conf->bucket_num);
+    assert(status == 0);
+
+    status = __value_set_num_from_lua_table(L, "session_config", "ff_bucket_num",
+                                            (int *)&session_conf->ff_bucket_num);
     assert(status == 0);
 
     status = __value_set_num_from_lua_table(L, "session_config", "session_expire_time",

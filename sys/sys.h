@@ -7,6 +7,7 @@
 
 #define sys_thread_init_global thread_init_global
 #define sys_thread_init_local thread_init_local
+#define sys_thread_init_wait_complete thread_init_wait_complete
 #define sys_thread_id_get thread_id_get
 #define sys_thread_fini_global thread_fini_global
 #define sys_thread_fini_local thread_fini_local

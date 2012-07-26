@@ -1098,13 +1098,14 @@ static int32_t sde_engine_process(module_info_t *this, void *data)
 
     longmask_op_and(proto_comm->match_mask[gp->sde_engine_id], lp->proto_idmask);
 	app_id = handle_engine_mask(gp->conf, proto_comm->match_mask[gp->sde_engine_id],
-								proto_comm->match_mask, gp->sde_engine_id,
-								&tag, 1);
+                                CS_ENG_TYPE, proto_comm->match_mask,
+                                gp->sde_engine_id, &tag, 1);
 	longmask_all_clr(proto_comm->match_mask[gp->sde_engine_id]);
 
 	if (app_id < 0) {
 		/*处理本引擎开始的mask*/
-		app_id = handle_engine_mask(gp->conf, lp->proto_idmask, proto_comm->match_mask,
+		app_id = handle_engine_mask(gp->conf, lp->proto_idmask,
+                                    CS_ENG_TYPE, proto_comm->match_mask,
 									gp->sde_engine_id, &tag, 0);
 	}
 	if (app_id >= 0) {

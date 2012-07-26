@@ -63,14 +63,16 @@ int32_t log_print(log_t *log_p, const char * fmt, ...)
 	char *p, *end;
 	int n = 0;
 
-	assert(log_p != NULL);
-
 	p = buffer;
 	end = buffer + sizeof(buffer);
 	va_start(ap, fmt);
 
 	n = vsnprintf(p, end-p, fmt, ap);
-	n = write(log_p->fd, buffer, n);
+    if (log_p != NULL) {
+    	n = write(log_p->fd, buffer, n);
+    } else {
+        n = write(fileno(stdout), buffer, n);
+    }
 	va_end(ap);
 	return n;
 }

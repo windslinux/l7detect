@@ -21,7 +21,7 @@ static int32_t lde_engine_fini_global(module_info_t *this);
 static int32_t lde_engine_fini_local(module_info_t *this, uint32_t thread_id);
 static log_t *pt_log;
 
-uint32_t lde_engine_id;
+static uint32_t lde_engine_id;
 
 module_ops_t lde_engine_ops = {
 	.init_global = lde_engine_init_global,
@@ -174,7 +174,7 @@ static int32_t lde_engine_process(module_info_t *this, void *data)
 	lp->proto_comm = proto_comm;
 	mask = proto_comm->match_mask[lde_engine_id];
 	app_id = handle_engine_appid(conf, proto_comm->match_mask[lde_engine_id],
-								 lde_match, lp,
+                                 CS_ENG_TYPE, lde_match, lp,
 								 proto_comm->match_mask, lde_engine_id, &tag, 1,
 								 &state);
 
@@ -182,7 +182,7 @@ static int32_t lde_engine_process(module_info_t *this, void *data)
 	if (app_id < 0) {
 		mask = gp->lde_cur;
 		app_id = handle_engine_appid(conf, gp->lde_cur,
-									 lde_match,  lp,
+									 CS_ENG_TYPE, lde_match,  lp,
 									 proto_comm->match_mask, lde_engine_id, &tag, 0,
 									 &state);
 

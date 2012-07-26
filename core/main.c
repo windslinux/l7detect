@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include <signal.h>
+#include <string.h>
 
 #include "common.h"
 #include "threadpool.h"
@@ -12,9 +13,11 @@
 #include "tag_manage.h"
 #include "process.h"
 #include "test.h"
+#include "meta_buf.h"
 
 #define MAX_MODULE_NUM  20
 #define MAX_TAG_NUM  40
+#define MAX_META_COUNT 10
 
 static void (*original_sig_int)(int num);
 static void (*original_sig_term)(int num);
@@ -22,6 +25,8 @@ static void (*original_sig_term)(int num);
 volatile int system_exit;
 module_hd_t *module_hd_p;
 log_t *syslog_p;
+meta_hd_t **meta_hd_pp;
+
 #ifdef __linux__
 struct threadpool *tp;
 #endif
@@ -37,6 +42,7 @@ void cap_term(int signum)
 
 static int32_t __sys_init()
 {
+    uint32_t i;
     original_sig_int = signal(SIGINT, cap_term);
     original_sig_term = signal(SIGTERM, cap_term);
 
@@ -47,14 +53,27 @@ static int32_t __sys_init()
 		return -INIT_ERROR;
 	}
 
-   return STATUS_OK;
+    meta_hd_pp = zmalloc(meta_hd_t **, g_conf.thread_num * sizeof(meta_hd_t *));
+    if_error_return(meta_hd_pp != NULL, NO_SPACE_ERROR);
+
+    for (i=0; i<g_conf.thread_num; i++) {
+        meta_hd_pp[i] = meta_buffer_sys_create(MAX_META_COUNT);
+        if_error_return(meta_hd_pp[i] != NULL, NO_SPACE_ERROR);
+    }
+    return STATUS_OK;
 }
 
 static int32_t __sys_fini()
 {
+    uint32_t i;
     if (log_fini(&syslog_p) != 0) {
 		return -FINI_ERROR;
 	}
+    for (i=0; i<g_conf.thread_num; i++) {
+        meta_buffer_sys_destroy(meta_hd_pp[i]);
+    }
+    free(meta_hd_pp);
+
     return STATUS_OK;
 }
 static int32_t __thread_init()
@@ -62,6 +81,8 @@ static int32_t __thread_init()
     assert(sys_thread_init_global() == 0);
 
     tp = threadpool_init(g_conf.thread_num, sys_thread_init_local);
+    thread_init_wait_complete(g_conf.thread_num);
+
     assert(tp);
     return 0;
 }

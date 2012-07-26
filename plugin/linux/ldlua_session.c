@@ -15,8 +15,6 @@ LDLUA_METHOD session_state(lua_State *L);
 
 LDLUA_CLASS_DEFINE(session,FAIL_ON_NULL("expired session"),NOP);
 
-extern uint32_t lde_engine_id;
-
 static const luaL_reg session_methods[] = {
 	{"savenum", session_savenum},
 	{"savestr", session_savestr},
@@ -40,10 +38,12 @@ LDLUA_METHOD session_savenum(lua_State* L)
 {
 	int32_t status;
 #define LDLUA_OPTARG_NUM_INDEX 2
+#define LDLUA_SAVE_NUM_ENGINE_STOCK 3
 	session ss = check_session(L, 1);
 	long num = luaL_optlong(L, LDLUA_OPTARG_NUM_INDEX, 0);
+    uint32_t engine_stock = luaL_optint(L, LDLUA_SAVE_NUM_ENGINE_STOCK, 0);
 
-	status = protobuf_setbuf(ss->protobuf_head, lde_engine_id, sizeof(long), &num);
+	status = protobuf_setbuf(ss->protobuf_head, engine_stock, sizeof(long), &num);
 	if (status != 0) {
 		luaL_error(L,"savenum error, status %d\n", status);
 	}
@@ -54,10 +54,12 @@ LDLUA_METHOD session_savestr(lua_State* L)
 {
 	int32_t status;
 #define LDLUA_OPTARG_STR_INDEX 2
+#define LDLUA_SAVE_STR_ENGINE_STOCK 3
 	session ss = check_session(L, 1);
 	char *str = (char *)luaL_optstring(L, LDLUA_OPTARG_STR_INDEX, 0);
+    uint32_t engine_stock = luaL_optint(L, LDLUA_SAVE_STR_ENGINE_STOCK, 0);
 
-	status = protobuf_setbuf(ss->protobuf_head, lde_engine_id, strlen(str), str);
+	status = protobuf_setbuf(ss->protobuf_head, engine_stock, strlen(str), str);
 	if (status != 0) {
 		luaL_error(L,"savestr error, status %d\n", status);
 	}
@@ -68,9 +70,11 @@ LDLUA_METHOD session_saveindex(lua_State* L)
 {
 #define LDLUA_OPTARG_SESSION_INDEX 2
 #define LDLUA_OPTARG_SESSION_LEN 3
+#define LDLUA_SAVE_INDEX_ENGINE_STOCK 4
 	session ss = check_session(L, 1);
 	int index = luaL_optint(L, LDLUA_OPTARG_SESSION_INDEX, 0);
 	int len = luaL_optint(L, LDLUA_OPTARG_SESSION_LEN, 0);
+    uint32_t engine_stock = luaL_optint(L, LDLUA_SAVE_INDEX_ENGINE_STOCK, 0);
 	packet_t *packet;
 	int32_t status;
 	uint32_t app_len = __app_length(ss->packet);
@@ -93,7 +97,7 @@ LDLUA_METHOD session_saveindex(lua_State* L)
 	} else {
 		n = ntohl(n);
 	}
-	status = protobuf_setbuf(ss->protobuf_head, lde_engine_id, sizeof(lua_Integer), &n);
+	status = protobuf_setbuf(ss->protobuf_head, engine_stock, sizeof(lua_Integer), &n);
 	if (status != 0) {
 		luaL_error(L,"session set error, status %d\n", status);
 	}
@@ -109,9 +113,11 @@ LDLUA_METHOD session_state(lua_State* L)
 
 LDLUA_METHOD session_loadnum(lua_State* L)
 {
+#define LDLUA_LOAD_NUM_ENGINE_STOCK 2
 	session ss = check_session(L, 1);
+    uint32_t engine_stock = luaL_optint(L, LDLUA_LOAD_NUM_ENGINE_STOCK, 0);
 
-	protobuf_node_t *node = protobuf_find(ss->protobuf_head, lde_engine_id);
+	protobuf_node_t *node = protobuf_find(ss->protobuf_head, engine_stock);
 	if (node != NULL) {
 		if (node->buf_data != NULL) {
 			lua_Integer *n = (lua_Integer *)node->buf_data;
@@ -128,9 +134,11 @@ LDLUA_METHOD session_loadnum(lua_State* L)
 
 LDLUA_METHOD session_loadstr(lua_State* L)
 {
+#define LDLUA_LOAD_STR_ENGINE_STOCK 2
 	session ss = check_session(L, 1);
+    uint32_t engine_stock = luaL_optint(L, LDLUA_LOAD_STR_ENGINE_STOCK, 0);
 
-	protobuf_node_t *node = protobuf_find(ss->protobuf_head, lde_engine_id);
+	protobuf_node_t *node = protobuf_find(ss->protobuf_head, engine_stock);
 	if (node != NULL) {
 		if (node->buf_data != NULL) {
 			char *n = (char *)node->buf_data;

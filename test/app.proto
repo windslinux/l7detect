@@ -1,9 +1,14 @@
 gstate = {init=0, s1=1, s2=2, s3=3, s4=4, s5=5, s6=6, s7=7, s8=8, final=9}
 --lde引擎是顺序匹配，顺序由proto_list决定
 proto_list={"test", "ppstream", "qqlive", "http", "dns", "ssl", "nat",
-			"sametime", "qq_file", "ssh"}
-engine_list={"pde", "sde", "lde"}
+			"sametime", "qq_file", "ssh", "ftp", "ftp_data"}
+cs_eng_list={"pde", "sde", "lde"} --协议初步识别引擎
+as_eng_list={"cdde"}  --协议进一步识别引擎
 pkb_dir = {up=1, down=2}
+
+eng_list={}
+proto_list_index = {}
+eng_list_index = {}
 
 sde={}
 sde.conf = {
@@ -46,7 +51,7 @@ qq_file.lde = function(buf, session)
 			  if (buf:len() >= 2) then
 			  if (state == gstate.init and buf:getbyte(0) == 0x04 and buf:getbyte(-1) == 0x03) then
 				  if (buf:dir() == pkb_dir.up) then
-				  	 session:saveindex(1, 2)
+				  	 session:saveindex(1, 2, proto_list_index("lde") - 1)
 				  	 state = gstate.s1
 				  end
 				  return state
@@ -54,7 +59,7 @@ qq_file.lde = function(buf, session)
 			  end
 
 			  if (state == gstate.s1 and buf:dir() == pkb_dir.down) then
-			     if (buf(1,2):uintbe() == session:loadnum()) then
+			     if (buf(1,2):uintbe() == session:loadnum(proto_list_index("lde") - 1)) then
 				 	state = gstate.final
 				 end
 			  end
@@ -117,8 +122,84 @@ sametime.pde = "tcp/1533"
 ssh = {}
 ssh.pde = "tcp/22"
 
---print(qq_talk.sde[1][-1])
---[[for k, v in pairs(qq_chat)
-do
-print(k,v)
-end]]
+
+ftp = {}
+ftp.pde = "tcp/21"
+ftp.cdde = function(buf, session, meta)
+           if (buf:len() >= 4) then
+                if (buf(0, 4):string() == "PORT") then
+                    local j = 5
+                    local ip, port
+                    ip, j = get_ftp_active_code(buf, j, 4)
+                    port, j = get_ftp_active_code(buf, j, 2)
+                    meta:add_ff(ip, port, proto_list_index["ftp_data"] - 1) --lua的index从1开始
+               elseif (buf(0, 3):string() == "226") then
+                    return gstate.final
+                end
+           end
+           return gstate.s2
+           end
+
+ftp_data = {}
+ftp_data.pde = "tcp/20"
+
+function get_ftp_active_code(buf, j, bytes)
+    local prev, i
+    local value, v, b
+    value = 0
+    for i=1, bytes do
+        len = 0
+        prev = j
+        b = buf:getbyte(j)
+        v = 0
+        while (b ~= 0x2c and b ~= 0x0d) do
+            j = j + 1
+            v = v * 10 + b - 0x30;
+            b = buf:getbyte(j)
+        end
+        for k=1, bytes-i do
+            v = v * 256
+        end
+        value = value + v
+        j = j + 1
+    end
+    return value, j
+end
+
+function reverse_table(obj)
+    local k, v
+    local revobj={}
+    for k,v in pairs(obj) do
+        revobj[v] = k
+    end
+    return revobj
+end
+
+function merge_table(obj1, obj2)
+    local obj={}
+    local k, v
+    for k, v in pairs(obj1) do
+        table.insert(obj, v)
+    end
+    for k, v in pairs(obj2) do
+        table.insert(obj, v)
+    end
+    return obj
+end
+
+function show_table(obj)
+    for k, v in pairs(obj) do
+        print("key="..k..", v=".. v)
+    end
+end
+
+
+function init()
+    local k, v
+    proto_list_index = reverse_table(proto_list)
+    engine_list = merge_table(cs_eng_list, as_eng_list)
+    engine_list_index = reverse_table(engine_list)
+end
+
+init()
+

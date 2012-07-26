@@ -22,6 +22,7 @@
 #include "process.h"
 #include "hash_table.h"
 #include "decap.h"
+#include "ff_table.h"
 
 #define INC_CNT(count) count++
 
@@ -68,10 +69,11 @@ typedef struct session_index {
 	uint32_t hash:24;
 } session_index_t;
 
-typedef struct session_item {
+struct session_item {
 	session_index_t index;
 	flow_item_t flow[2];		/**< [0]为上行流，[1]为下行流 */
     packet_t *packet;           /**< 包缓存，用来处理dirty的情况*/
+    ff_item_t *sub_ff;
 #define FLOW_UP_STREAM_INDEX 0
 #define FLOW_DN_STREAM_INDEX 1
 	uint16_t dir:2;
@@ -79,6 +81,7 @@ typedef struct session_item {
 #define SESSION_INDEX_DNSTREAM PKT_DIR_DNSTREAM
 #define SESSION_DIR_MASK 0x3
 #define SESSION_DIRTY 0x10
+#define SESSION_NO_TIMEOUT 0x20
 	uint16_t flag:14;
 	uint16_t stage;
 	uint64_t id;
@@ -87,7 +90,7 @@ typedef struct session_item {
 	uint32_t app_type;			/**<  协议小类*/
 	uint32_t app_state;         /**< 协议识别状态*/
 	list_head_t protobuf_head;
-}session_item_t;
+};
 
 typedef uint32_t (*hash_func)(session_index_t *info);
 
@@ -97,6 +100,7 @@ typedef struct info_global {
     session_conf_t *conf;
 	sf_proto_conf_t *sf_conf;
 	hash_table_hd_t *session_table;
+	hash_table_hd_t *ff_table;
 	log_t *log_c;
     struct {
         pthread_t tid;
@@ -111,6 +115,7 @@ typedef struct info_global {
 typedef struct info_local {
 	packet_t *packet;
 	session_item_t *session;	    /**< 流表中找到的表项*/
+    ff_item_t *ff_item;
 	session_index_t index_cache;	/**< 临时的session cache，减小每次进入函数堆栈分配的开销 */
 	session_frm_stats_t stats;
 	proto_comm_t proto_buf;        /**< 用于处理时传递上一次的数据给sf_plugin */
@@ -122,8 +127,8 @@ typedef struct hash_map {
 } hash_map_t;
 
 static void __print_item(info_global_t *info, session_item_t *item);
-static int32_t __free_item(hash_table_hd_t *session_table, uint32_t hash,
-                                session_item_t *item);
+static int32_t __free_item(hash_table_hd_t *session_table, hash_table_hd_t *ff_table,
+                            uint32_t hash, session_item_t *item);
 
 static uint32_t hash_xor(session_index_t *index)
 {
@@ -143,7 +148,8 @@ static uint32_t hash_sum(session_index_t *index)
 static void __flow_timer_process(evutil_socket_t fd, short which, void *arg)
 {
     info_global_t *info;
-    hash_table_hd_t *hd;
+    hash_table_hd_t *hd, *ff_hd;
+    ff_item_t *ff_item;
     session_item_t *item;
     session_conf_t *conf;
     struct timeval current;
@@ -151,26 +157,50 @@ static void __flow_timer_process(evutil_socket_t fd, short which, void *arg)
 
     info = (info_global_t *)arg;
     hd = info->session_table;
+    ff_hd = info->ff_table;
     conf = info->conf;
     sys_get_time(&current);
 
     hash_table_lock(hd, info->timer.bucket, 0);
     hash_table_one_bucket_for_each(hd, info->timer.bucket, item) {
         if (sys_time_diff(item->last_time, current) >= conf->session_expire_time) {
-            if (item->flag & SESSION_DIRTY) {
+            if ((item->flag & SESSION_DIRTY) || (item->flag & SESSION_NO_TIMEOUT)) {
                 continue;
             }
             assert(item->packet == NULL);
             __print_item(info, item);
             log_info(syslog_p, "timer item %p, last_sec=%d, current=%d\n", item, item->last_time.tv_sec, current.tv_sec);
-            if ((status = __free_item(hd, info->timer.bucket, item)) != 0) {
+            if ((status = __free_item(hd, info->ff_table, info->timer.bucket, item)) != 0) {
                 log_error(syslog_p, "free item error, status %d\n", status);
             }
-        }
+        } else {
+            ff_item = item->sub_ff;
+            while (ff_item) {
+                uint32_t ip, ff_hash;
+                uint16_t port;
+                int32_t rv;
 
+                ff_item_t *current_item = ff_item;
+                ff_item = ff_item->next;
+                /*这里没有加锁就访问了，但在推出前，timer线程已经结束，这个时候剩余的ff_item将在session_clear中删除，因此是没有问题的*/
+                ip = current_item->ip;
+                port = current_item->port;
+                ff_hash = ff_table_hash(ff_hd, ip, port);
+                ff_table_lock(ff_hd, ff_hash);
+                if (sys_time_diff(ff_item->last_time, current) >= conf->session_expire_time) {
+                    rv = ff_table_delete(ff_hd, ff_hash, current_item);
+                    if (rv != 0) {
+            		    log_error(syslog_p, "remove ff_item error, status %d\n", rv);
+                    }
+                    item->sub_ff = ff_item;
+                }
+                ff_table_unlock(ff_hd, ff_hash);
+            }
+        }
     }
-    hash_table_unlock(hd, info->timer.bucket, 0);
+
     info->timer.bucket++;
+
     if (info->timer.bucket >= hd->bucket_num) {
         info->timer.bucket = 0;
     }
@@ -319,6 +349,7 @@ static inline void __session_return_handle(info_local_t *this, packet_t *packet,
 }
 
 static inline uint32_t __post_parsed(info_local_t *this, hash_table_hd_t *hd,
+                                     hash_table_hd_t *ff_hd,
                                      proto_comm_t *comm,  uint32_t final_state)
 {
     packet_t *packet;
@@ -328,12 +359,38 @@ static inline uint32_t __post_parsed(info_local_t *this, hash_table_hd_t *hd,
     packet = this->packet;
 
     hash_table_lock(hd, session->index.hash, 0);
+	session->app_type = packet->app_type;
 	if (comm->state == final_state) {
-		session->app_type = packet->app_type;
 		/*do some clean things*/
+        session->flag &= ~ SESSION_NO_TIMEOUT;
 		protobuf_destroy(&session->protobuf_head);
-	} else if (comm->state != session->app_state) {
+	} else {
 		/*save status*/
+        if (session->app_type != INVALID_PROTO_ID) {
+            /*已经识别协议，在分析阶段*/
+            meta_info_t *meta;
+            meta = meta_buffer_item_get(packet->meta_hd, NULL, META_TYPE_FF);
+            if (meta != NULL) {
+                meta_ff_t *ff;
+                ff_item_t *item;
+                uint32_t hash;
+
+                ff = (meta_ff_t *)meta_buffer_item_get_data(packet->meta_hd, meta);
+                if (ff != NULL)  {
+                    hash = ff_table_hash(ff_hd, ff->ip, ff->port);
+                    ff_table_lock(ff_hd, hash);
+                    item = ff_table_insert(ff_hd, session, hash, ff->ip, ff->port, ff->app_type);
+                    if (item == NULL) {
+                        log_error(syslog_p, "ff_table insert error!\n");
+                    } else {
+                        item->next = session->sub_ff;
+                        session->sub_ff = item;
+                    }
+                    ff_table_unlock(ff_hd, hash);
+                }
+            }
+            session->flag |= SESSION_NO_TIMEOUT;
+        }
 		session->app_state = comm->state;
         /*mask在sf_plugin模块中已经被修改*/
 	}
@@ -384,21 +441,44 @@ static void __session_item_show(info_global_t *info, session_frm_stats_t *stats)
 	log_notice(syslog_p, "max_bucket=%d\n", max_bucket);
 }
 
-static int32_t __free_item(hash_table_hd_t *session_table, uint32_t hash,
-                                session_item_t *item)
+static int32_t __free_item(hash_table_hd_t *session_table, hash_table_hd_t *ff_table,
+                            uint32_t hash, session_item_t *item)
 {
     int32_t status;
+    ff_item_t *ff_item;
 
     status = hash_table_remove(session_table, hash, item);
 	if (status != 0) {
         return status;
 	}
+
+    ff_item = item->sub_ff;
+    while (ff_item) {
+        uint32_t ip, ff_hash;
+        uint16_t port;
+        int32_t rv;
+
+        ff_item_t *current = ff_item;
+        ff_item = ff_item->next;
+        /*这里没有加锁就访问了，必须要保证ff_item只能在这里删除*/
+        ip = current->ip;
+        port = current->port;
+        ff_hash = ff_table_hash(ff_table, ip, port);
+        ff_table_lock(ff_table, ff_hash);
+
+        rv = ff_table_delete(ff_table, ff_hash, current);
+        if (rv != 0) {
+		    log_error(syslog_p, "remove ff_item error, status %d\n", rv);
+        }
+        item->sub_ff = ff_item;
+        ff_table_unlock(ff_table, ff_hash);
+    }
 	protobuf_destroy(&item->protobuf_head);
 	free(item);
     return 0;
 }
 
-static void __session_table_clear(hash_table_hd_t *session_table)
+static void __session_table_clear(hash_table_hd_t *session_table, hash_table_hd_t *ff_table)
 {
 	uint32_t i;
 	int32_t status;
@@ -408,7 +488,7 @@ static void __session_table_clear(hash_table_hd_t *session_table)
 		hash_table_lock(session_table, i, 0);
 		hash_table_one_bucket_for_each(session_table, i, item) {
 			if (item) {
-                if ((status = __free_item(session_table, i, item)) != 0) {
+                if ((status = __free_item(session_table, ff_table, i, item)) != 0) {
 		            log_error(syslog_p, "remove item error, status %d\n", status);
                 }
             }
@@ -417,12 +497,13 @@ static void __session_table_clear(hash_table_hd_t *session_table)
 	}
 }
 
+
 static int32_t session_frm_init_global(module_info_t *this)
 {
     info_global_t *info;
     session_conf_t *conf;
 	sf_proto_conf_t *sf_conf;
-    hash_table_hd_t *session_table;
+    hash_table_hd_t *session_table, *ff_table;
 	uint32_t i;
     int rv;
 
@@ -446,7 +527,11 @@ static int32_t session_frm_init_global(module_info_t *this)
 	session_table = hash_table_init(conf->bucket_num, SPINLOCK);
 	assert(session_table);
 
+    ff_table = ff_table_init(conf->ff_bucket_num);
+    assert(ff_table);
+
     info->session_table = session_table;
+    info->ff_table = ff_table;
     info->conf = conf;
     info->sf_conf = sf_conf;
 
@@ -499,6 +584,9 @@ static int32_t session_frm_process(module_info_t *this, void *data)
 	session_index_t *buf;
 	hash_table_hd_t *hd;
 	uint32_t hash;
+    meta_tuple_info_t tuple_info;
+    meta_info_t *m_info;
+
 	uint8_t swap_flag = 0;
 	int32_t status;
 	proto_comm_t *comm = NULL;
@@ -523,7 +611,7 @@ static int32_t session_frm_process(module_info_t *this, void *data)
 
 	if (packet->pktag == parsed_tag) {
 		assert(comm);
-		return __post_parsed(lp, hd, comm, gp->sf_conf->final_state);
+		return __post_parsed(lp, hd, gp->ff_table, comm, gp->sf_conf->final_state);
 	}
 
 	if (!(packet->prot_types[packet->prot_depth-2] == DPI_PROT_IPV4)) {
@@ -542,6 +630,14 @@ static int32_t session_frm_process(module_info_t *this, void *data)
 	buf->port[0] = ntohs(l4hdr->src_port);
 	buf->port[1] = ntohs(l4hdr->dst_port);
 	buf->protocol = iphdr->protocol;
+    m_info = meta_buffer_item_get(packet->meta_hd, NULL, META_TYPE_TUPLE_INFO);
+    if (m_info == NULL) {
+        tuple_info.sip = buf->ip[0];
+        tuple_info.dip = buf->ip[1];
+        tuple_info.sport = buf->port[0];
+        tuple_info.dport = buf->port[1];
+        tuple_info.protocol = buf->protocol;
+    }
 
 	if (buf->ip[0] > buf->ip[1]) {
 		swap(buf->ip[0], buf->ip[1]);
@@ -594,9 +690,18 @@ static int32_t session_frm_process(module_info_t *this, void *data)
 		packet->dir = session->dir;
 	}
 
+    if (m_info == NULL) {
+        int32_t v;
+
+        tuple_info.dir = packet->dir;
+        v = meta_buffer_item_add(packet->meta_hd, META_TYPE_TUPLE_INFO, &tuple_info, sizeof(tuple_info));
+        if (v != 0) {
+            log_error(syslog_p, "TUPLE_INFO add error!\n");
+        }
+    }
 	__update_session_count(session, packet);
     session->packet = packet;
-    if (session->app_type != INVALID_PROTO_ID) {
+    if (session->app_type != INVALID_PROTO_ID && (session->app_state == gp->sf_conf->final_state)) {
         if (packet->flag & PKT_DONT_FREE) {
             /*这种情况的检查主要是由于前一个数据包已经查出协议特征，而当前的数据包到达这个地方的时候，
              * 有可能会话中还有未被处理的数据包，因此不能简单返回，还要检查一下*/
@@ -606,11 +711,35 @@ static int32_t session_frm_process(module_info_t *this, void *data)
             packet->pktag = next_stage_tag;
         }
     } else {
-        /*注意dirty位加的位置*/
         session->flag |= SESSION_DIRTY;
+        /*注意dirty位加的位置*/
 	    packet->pktag = sf_plugin_tag;
+        if (session->app_type == INVALID_PROTO_ID) {
+            ff_item_t *ff;
+            uint32_t ff_hash;
+
+            ff_hash = ff_table_hash(gp->ff_table, session->index.ip[0], session->index.port[0]);
+            ff_table_lock(gp->ff_table, ff_hash);
+            ff = ff_table_search(gp->ff_table, ff_hash, session->index.ip[0], session->index.port[0]);
+            if (ff == NULL) {
+                ff_table_unlock(gp->ff_table, ff_hash);
+                ff_hash = ff_table_hash(gp->ff_table, session->index.ip[1], session->index.port[1]);
+                ff_table_lock(gp->ff_table, ff_hash);
+                ff = ff_table_search(gp->ff_table, ff_hash, session->index.ip[1], session->index.port[1]);
+            }
+            if (ff == NULL) {
+                ff_table_unlock(gp->ff_table, ff_hash);
+            } else {
+                /*这里不应该去访问父流，否则在删除时会有锁的问题，比较难解决*/
+                /*set session variable and release ff_table lock*/
+                session->app_type = ff->app_type;
+                session->app_state = gp->sf_conf->final_state;
+                ff_table_unlock(gp->ff_table, ff_hash);
+                __session_return_handle(lp, packet, session);
+            }
+        }
     }
-	hash_table_unlock(hd, hash, 0);
+    hash_table_unlock(hd, hash, 0);
 	return packet->pktag;
 failed:
 	INC_CNT(stats->session_failed);
@@ -686,10 +815,11 @@ static int32_t session_frm_fini_global(module_info_t *this)
 			log_fini(&info->log_c);
 		}
 		if (info->session_table) {
-			__session_table_clear(info->session_table);
+			__session_table_clear(info->session_table, info->ff_table);
 		}
 	}
 
+    ff_table_fini(info->ff_table);
 	free(info);
 	return 0;
 }

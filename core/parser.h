@@ -2,6 +2,7 @@
 #define __PARSER_H__
 
 #include "common.h"
+#include "meta_buf.h"
 
 #define MAX_PACKET_LEN 1518
 #define MAX_PARSER_DEPTH 10
@@ -9,6 +10,7 @@
 typedef struct packet {
 	void *top_packet;
     void *next_packet;
+    meta_hd_t *meta_hd;/*该包对应的元数据头*/
 	uint64_t dir:2;
 #define PKT_DIR_UPSTREAM 0x1
 #define PKT_DIR_DNSTREAM 0x2

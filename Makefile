@@ -38,7 +38,7 @@ CFLAGS_LOCAL = -g -O2 -W -Wall -Wno-unused-parameter
 CFLAGS_LOCAL += $($(TARGET)-FLAGS)
 
 CFLAGS_GLOBAL += -I$(TOP)/include -I$(LIBLUA_DIR)/include
-LDFLAGS_GLOBAL += -lpthread -lpcap -ldl -lm -lrt $(LIBEVENT) -L$(LIBLUA_DIR)/lib -llua -L$(CTHREADPOOL_DIR) -lcthreadpool
+LDFLAGS_GLOBAL += $(LIBEVENT) -L$(LIBLUA_DIR)/lib -llua -L$(CTHREADPOOL_DIR) -lcthreadpool -lpthread -lpcap -ldl -lm -lrt
 include $(TOP)/build/application.mk
 
 CLEAN_LIST += $(OBJS)

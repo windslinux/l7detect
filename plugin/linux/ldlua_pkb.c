@@ -6,12 +6,17 @@
 
 LDLUA_METHOD pkb_index(lua_State* L);
 LDLUA_METHOD pkb_range(lua_State* L);
+LDLUA_METHOD pkb_sip(lua_State* L);
+LDLUA_METHOD pkb_dip(lua_State* L);
+LDLUA_METHOD pkb_sport(lua_State* L);
+LDLUA_METHOD pkb_dport(lua_State* L);
 LDLUA_METHOD pkb_dir(lua_State* L);
 LDLUA_METHOD pkb_len(lua_State* L);
 LDLUA_METHOD pkb_gc(lua_State *L);
 //LDLUA_METHOD pkb_tostring(lua_State *);
 LDLUA_METHOD pkbrange_uintbe(lua_State* L);
 LDLUA_METHOD pkbrange_uintle(lua_State* L);
+LDLUA_METHOD pkbrange_string(lua_State* L);
 LDLUA_METHOD pkbrange_gc(lua_State *L);
 LDLUA_METHOD pkb_debug(lua_State *L);
 LDLUA_CLASS_DEFINE(pkb,FAIL_ON_NULL("expired pkb"),NOP);
@@ -21,6 +26,10 @@ static const luaL_reg pkb_methods[] = {
     {"range", pkb_range},
     {"len", pkb_len},
 	{"getbyte", pkb_index},
+    {"sip", pkb_sip},
+    {"dip", pkb_dip},
+    {"sport", pkb_sport},
+    {"dport", pkb_dport},
 	{"dir", pkb_dir},
     {"debug", pkb_debug},
     { NULL, NULL },
@@ -28,7 +37,6 @@ static const luaL_reg pkb_methods[] = {
 
 static const luaL_reg pkb_meta[] = {
     {"__call", pkb_range},
-//    {"__tostring", pkb_tostring},
     {"__gc", pkb_gc},
     { NULL, NULL },
 };
@@ -36,6 +44,7 @@ static const luaL_reg pkb_meta[] = {
 static const luaL_reg pkbrange_methods[] = {
 	{"uintbe", pkbrange_uintbe},
 	{"uintle", pkbrange_uintle},
+    {"string", pkbrange_string},
 	{NULL, NULL},
 };
 static const luaL_reg pkbrange_meta[] = {
@@ -85,6 +94,23 @@ LDLUA_METHOD pkb_index(lua_State* L)
 	return 1;
 }
 
+LDLUA_METHOD pkbrange_string(lua_State* L)
+{
+	pkbrange pkbr = check_pkbrange(L, 1);
+	pkb packet;
+	int offset;
+	void *app_data;
+	if (!(pkbr && pkbr->pkt)) {
+		return 0;
+	}
+
+	packet = pkbr->pkt;
+	offset = pkbr->offset;
+	app_data = packet->data + packet->app_offset;
+    lua_pushlstring(L, (const char *)(app_data + offset), pkbr->length);
+	return 1;
+}
+
 LDLUA_METHOD pkb_range(lua_State* L)
 {
 	/* Creates a pkbr from this pkb. This is used also as the pkb:__call() metamethod. */
@@ -118,9 +144,92 @@ LDLUA_METHOD pkb_len(lua_State* L)
     LDLUA_RETURN(1); /* The length of the pkt. */
 }
 
+LDLUA_METHOD pkb_sip(lua_State* L)
+{
+    pkb pkt = check_pkb(L,1);
+    meta_info_t *info;
+    meta_tuple_info_t *tuple;
+
+    if (!pkt) {
+		return 0;
+	}
+
+    info = meta_buffer_item_get(pkt->meta_hd, NULL, META_TYPE_TUPLE_INFO);
+    if (info != NULL) {
+        tuple = meta_buffer_item_get_data(pkt->meta_hd, info);
+        if (tuple != NULL) {
+            lua_pushnumber(L, tuple->sip);
+            LDLUA_RETURN(1);
+        }
+    }
+    LDLUA_RETURN(0);
+}
+
+LDLUA_METHOD pkb_dip(lua_State* L)
+{
+    pkb pkt = check_pkb(L,1);
+    meta_info_t *info;
+    meta_tuple_info_t *tuple;
+
+    if (!pkt) {
+		return 0;
+	}
+
+    info = meta_buffer_item_get(pkt->meta_hd, NULL, META_TYPE_TUPLE_INFO);
+    if (info != NULL) {
+        tuple = meta_buffer_item_get_data(pkt->meta_hd, info);
+        if (tuple != NULL) {
+            lua_pushnumber(L, tuple->dip);
+            LDLUA_RETURN(1);
+        }
+    }
+    LDLUA_RETURN(0);
+}
+
+LDLUA_METHOD pkb_sport(lua_State* L)
+{
+    pkb pkt = check_pkb(L,1);
+    meta_info_t *info;
+    meta_tuple_info_t *tuple;
+
+    if (!pkt) {
+		return 0;
+	}
+
+    info = meta_buffer_item_get(pkt->meta_hd, NULL, META_TYPE_TUPLE_INFO);
+    if (info != NULL) {
+        tuple = meta_buffer_item_get_data(pkt->meta_hd, info);
+        if (tuple != NULL) {
+            lua_pushnumber(L, tuple->sport);
+            LDLUA_RETURN(1);
+        }
+    }
+    LDLUA_RETURN(0);
+}
+
+LDLUA_METHOD pkb_dport(lua_State* L)
+{
+    pkb pkt = check_pkb(L,1);
+    meta_info_t *info;
+    meta_tuple_info_t *tuple;
+
+    if (!pkt) {
+		return 0;
+	}
+
+    info = meta_buffer_item_get(pkt->meta_hd, NULL, META_TYPE_TUPLE_INFO);
+    if (info != NULL) {
+        tuple = meta_buffer_item_get_data(pkt->meta_hd, info);
+        if (tuple != NULL) {
+            lua_pushnumber(L, tuple->dport);
+            LDLUA_RETURN(1);
+        }
+    }
+    LDLUA_RETURN(0);
+}
+
 LDLUA_METHOD pkb_dir(lua_State* L)
 {
-	/* Obtain the length of a TVB */
     pkb pkt = check_pkb(L,1);
 
     if (!pkt) {
@@ -171,6 +280,9 @@ LDLUA_METHOD pkbrange_uintbe(lua_State* L)
 	case 2:
 		lua_pushnumber(L, htons(*(uint16_t *)(app_data + offset)));
 		return 1;
+    case 3:
+		lua_pushnumber(L, htonl(*(uint32_t *)(app_data + offset)));
+		return 1;
 	case 4:
 		lua_pushnumber(L, htonl(*(uint32_t *)(app_data + offset)));
 		return 1;
@@ -201,6 +313,9 @@ LDLUA_METHOD pkbrange_uintle(lua_State* L)
 		return 1;
 	case 2:
 		lua_pushnumber(L, (*(uint16_t *)(app_data + offset)));
+		return 1;
+	case 3:
+		lua_pushnumber(L, (*(uint32_t *)(app_data + offset)));
 		return 1;
 	case 4:
 		lua_pushnumber(L, (*(uint32_t *)(app_data + offset)));

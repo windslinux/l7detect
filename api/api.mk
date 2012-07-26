@@ -10,6 +10,7 @@ API_OBJS = $(OBJ_DIR)/log.o
 API_OBJS += $(OBJ_DIR)/module_manage.o
 API_OBJS += $(OBJ_DIR)/tag_manage.o
 API_OBJS += $(OBJ_DIR)/hash_table.o
+API_OBJS += $(OBJ_DIR)/meta_buf.o
 API_OBJS += $(OBJ_DIR)/zone.o
 API_OBJS += $(OBJ_DIR)/helper.o
 
