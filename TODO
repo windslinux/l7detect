@@ -2,10 +2,14 @@ Todo list:
 1. 支持在线分析（5）；/*finished*/
 2. 支持多线程并发，开发linux多线程抽象层，减少未来移植的开销（5）；/*finished*/
 3. 支持DFA引擎SDE（4）；/*finished*/
-4. 支持DNS引擎DDE（4）；
-5. 支持HTTP url引擎UDE（4）；
-6. P2P研究以及对应的引擎TDE（4）；
-7. 流量特征识别引擎HDE（4）；
-8. 多协议识别引擎框架升级（4）；
-9. 支持linux和octeon se两种平台（2）；
+4. 支持lde的扩展引擎lde（4）;/*finished*/
+5. 支持类FTP的引擎CDDE(4); /*finished*/
+6. 支持http协议中特定字段组合匹配（如url, content-type, agent)的引擎UDE（4），增强协议识别的可用性；/*Next version*/
+7. 支持DNS引擎DDE（4）；
+8. 用app.proto描述opendpi中的协议特征(4)；
+9. P2P研究以及对应的引擎TDE（4）；
+10. 流量特征识别引擎HDE（4）；
+11. 多协议识别引擎框架升级（4）；
+12. 在内核态运行的版本（3）；
+13. 支持linux user/kernel/octeon se三种平台（2）；
 
