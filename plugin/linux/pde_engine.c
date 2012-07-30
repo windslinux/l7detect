@@ -193,6 +193,7 @@ static int32_t pde_engine_process(module_info_t *this, void *data)
 		port = ntohs(l4hdr->src_port);
 	}
 
+    proto_comm->engine_id = info->pde_engine_id;
 	/*处理上一个引擎发过来的mask*/
 	longmask_op_and(proto_comm->match_mask[info->pde_engine_id], info->pde_table[proto_index][port]);
 	app_id = handle_engine_mask(conf, proto_comm->match_mask[info->pde_engine_id],

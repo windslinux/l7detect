@@ -26,8 +26,10 @@ typedef struct proto_comm {
 	uint32_t app_id;
 	uint32_t debug;
 	packet_t *packet;
-	uint32_t state;
-    uint32_t thread_id;
+	uint16_t state;
+    uint16_t thread_id;
+    uint16_t engine_id;
+    uint16_t reserved;
 	longmask_t **match_mask;
     list_head_t *protobuf_head;/*用于跨包匹配的buf*/
 } proto_comm_t;

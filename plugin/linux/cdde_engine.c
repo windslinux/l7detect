@@ -166,6 +166,7 @@ static int32_t cdde_engine_process(module_info_t *this, void *data)
 	lp->proto_comm = proto_comm;
 	longmask_all_clr(proto_comm->match_mask[cdde_engine_id]);
     longmask_bit_set(proto_comm->match_mask[cdde_engine_id], app_id);
+    proto_comm->engine_id = cdde_engine_id;
 
 	handle_engine_appid(conf, proto_comm->match_mask[cdde_engine_id],
                                  AS_ENG_TYPE, cdde_match, lp,

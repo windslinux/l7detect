@@ -173,6 +173,8 @@ static int32_t lde_engine_process(module_info_t *this, void *data)
 	lp->packet = packet;
 	lp->proto_comm = proto_comm;
 	mask = proto_comm->match_mask[lde_engine_id];
+    proto_comm->engine_id = lde_engine_id;
+
 	app_id = handle_engine_appid(conf, proto_comm->match_mask[lde_engine_id],
                                  CS_ENG_TYPE, lde_match, lp,
 								 proto_comm->match_mask, lde_engine_id, &tag, 1,

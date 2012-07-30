@@ -1049,6 +1049,7 @@ static int32_t sde_engine_process(module_info_t *this, void *data)
 
     pthread_setspecific(key, lp);
     lp->tid_index = 0;
+    proto_comm->engine_id = gp->sde_engine_id;
     for (i=0; i<gp->graph_num; i++) {
         graph_info = &gp->graph_info[i];
         lp->current_graph = i;

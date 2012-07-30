@@ -168,7 +168,7 @@ static int32_t sf_plugin_process(module_info_t *this, void *data)
 	proto_comm = &lp->proto_comm;
 
     proto_comm->packet = packet;
-	proto_comm->app_id = INVALID_PROTO_ID;
+	proto_comm->app_id = session_comm->app_id;
     proto_comm->thread_id = sys_thread_id_get();
 	proto_comm->state = session_comm->state;
 	proto_comm->protobuf_head = session_comm->protobuf_head;
@@ -191,6 +191,13 @@ static int32_t sf_plugin_process(module_info_t *this, void *data)
 		}
 		init_tag = -1;
 	}
+    if (init_tag <= 0) {
+        if (session_comm->engine_id != 0) {
+            init_tag = session_comm->engine_id + 1;
+        }
+    }
+
+
 	if (gp->plugin_num) {
 		module_list_process(gp->plugin, gp->tag, init_tag, proto_comm);
 	}
