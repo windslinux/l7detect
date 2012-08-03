@@ -84,8 +84,8 @@ struct session_item {
 #define SESSION_NO_TIMEOUT 0x20
 	uint16_t flag:14;
 	uint16_t stage;
-    uint16_t engine_id;
-	uint16_t reserved;
+    //uint16_t engine_id;
+	uint32_t reserved;
 	sys_time_t start_time;
 	sys_time_t last_time;
 	uint32_t app_type;			/**<  协议小类*/
@@ -395,7 +395,6 @@ static inline uint32_t __post_parsed(info_local_t *this, hash_table_hd_t *hd,
 		session->app_state = comm->state;
         /*mask在sf_plugin模块中已经被修改*/
 	}
-    session->engine_id  = comm->engine_id;
     __session_return_handle(this, packet, session);
     hash_table_unlock(hd, session->index.hash, 0);
 	return packet->pktag;
@@ -763,7 +762,6 @@ static void* session_frm_result_get(module_info_t *this)
 	    assert(info->session);
 	    info->proto_buf.state = info->session->app_state;
 	    info->proto_buf.protobuf_head = &info->session->protobuf_head;
-        info->proto_buf.engine_id = info->session->engine_id;
         info->proto_buf.app_id = info->session->app_type;
 	    return &info->proto_buf;
     }

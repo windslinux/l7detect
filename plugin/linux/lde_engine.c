@@ -159,9 +159,8 @@ static int32_t lde_engine_process(module_info_t *this, void *data)
     info_global_t *gp;
 	info_local_t *lp;
 	sf_proto_conf_t *conf;
-	longmask_t *mask;
 	uint32_t tag = 0;
-	int32_t app_id, status;
+	int32_t app_id;
 	int32_t state = 0;
 
 	proto_comm = (proto_comm_t *)data;
@@ -172,7 +171,6 @@ static int32_t lde_engine_process(module_info_t *this, void *data)
     lp = (info_local_t *)module_priv_rep_get(this, proto_comm->thread_id);
 	lp->packet = packet;
 	lp->proto_comm = proto_comm;
-	mask = proto_comm->match_mask[lde_engine_id];
     proto_comm->engine_id = lde_engine_id;
 
 	app_id = handle_engine_appid(conf, proto_comm->match_mask[lde_engine_id],
@@ -182,7 +180,6 @@ static int32_t lde_engine_process(module_info_t *this, void *data)
 
 	longmask_all_clr(proto_comm->match_mask[lde_engine_id]);
 	if (app_id < 0) {
-		mask = gp->lde_cur;
 		app_id = handle_engine_appid(conf, gp->lde_cur,
 									 CS_ENG_TYPE, lde_match,  lp,
 									 proto_comm->match_mask, lde_engine_id, &tag, 0,
@@ -192,15 +189,6 @@ static int32_t lde_engine_process(module_info_t *this, void *data)
 	if (app_id >= 0) {
 		proto_comm->app_id = app_id;
 		proto_comm->state = state;
-
-		if (state != (int32_t)conf->final_state) {
-			status = protobuf_setmask(proto_comm->protobuf_head, lde_engine_id, app_id, mask);
-
-			if (status != 0) {
-				log_error(pt_log, "protobuf setmask error, status %d\n", status);
-				return 0;
-			}
-		}
 	} else {
 		proto_comm->app_id = INVALID_PROTO_ID;
 	}

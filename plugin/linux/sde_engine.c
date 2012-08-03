@@ -1111,11 +1111,11 @@ static int32_t sde_engine_process(module_info_t *this, void *data)
 	}
 	if (app_id >= 0) {
 		proto_comm->app_id = app_id;
-		proto_comm->state = gp->conf->final_state;
+	    proto_comm->state = gp->conf->final_state;
 	} else {
 		proto_comm->app_id = INVALID_PROTO_ID;
+	    proto_comm->state = 0;
 	}
-
     return tag;
 }
 

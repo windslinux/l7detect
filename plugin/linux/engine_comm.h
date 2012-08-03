@@ -68,6 +68,7 @@ static inline int32_t handle_engine_mask(sf_proto_conf_t *conf, longmask_t *this
                     }
                     assert(i < conf->total_engine_num);
                     *next_engine_tag = get_tag_from_engine_id(conf, i, engine_type, conf->total_engine_num);
+                    longmask_bit_set(match_mask[i], bit);
                 } else {
                     *next_engine_tag = 0;
                 }
@@ -90,7 +91,7 @@ static inline int32_t handle_engine_mask(sf_proto_conf_t *conf, longmask_t *this
 		*next_engine_tag = get_tag_from_engine_id(conf, this_engine + 1, engine_type, conf->total_engine_num);
 	}
 
-	return -1;
+   	return -1;
 }
 
 static inline int32_t handle_engine_appid(sf_proto_conf_t *conf,
@@ -141,6 +142,7 @@ static inline int32_t handle_engine_appid(sf_proto_conf_t *conf,
 
                     assert(i < conf->total_engine_num);
                     *next_engine_tag = get_tag_from_engine_id(conf, i, engine_type, conf->total_engine_num);
+				    longmask_bit_set(match_mask[i], bit);
                 } else {
                     *next_engine_tag = 0;
                 }
