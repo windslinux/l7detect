@@ -1,7 +1,7 @@
 gstate = {init=0, s1=1, s2=2, s3=3, s4=4, s5=5, s6=6, s7=7, s8=8, final=9}
 --lde引擎是顺序匹配，顺序由proto_list决定
 proto_list={"test", "ppstream", "qqlive", "http", "dns", "ssl", "nat",
-			"sametime", "qq_file", "ssh", "ftp", "ftp_data"}
+			"sametime", "qq_file", "ssh", "ftp", "ftp_data", "qq_test"}
 cs_eng_list={"pde", "sde", "lde"} --协议初步识别引擎
 as_eng_list={"cdde"}  --协议进一步识别引擎
 pkb_dir = {up=1, down=2}
@@ -39,11 +39,32 @@ sde.conf = {
 			  end
 ]]
 
-test = {}
-test.pde = "udp/8000"
-test.sde = {
-                {["1"]="fe", ["2-3|1~5"]="42000042|(zhou)"}
+qq_test = {}
+qq_test.pde = "udp/8000"
+qq_test.sde = {
+                {["0"]="02", ["-1"]="03"}
             }
+qq_test.lde = function(buf, session)
+			  local state = session:state()
+			  if (buf:len() >= 5) then
+			  if (state == gstate.init) then
+				  if (buf:dir() == pkb_dir.up) then
+				  	 session:saveindex(4, 2, engine_list_index["lde"] - 1)
+                     --save和load的最后一个参数都是slot，一般使用本引擎所在的slot，但如果要记录多个参数，也可以借用其他引擎的slot
+				  	 state = gstate.s1
+				  end
+				  return state
+			  end
+			  end
+
+			  if (buf:len() >= 5 and state == gstate.s1) then
+			     if (buf(4, 2):uintbe() == session:loadnum(engine_list_index["lde"] - 1)) then
+				 	state = gstate.final
+				 end
+			  end
+			  return state
+			  end
+
 
 qq_file = {}
 qq_file.lde = function(buf, session)
@@ -51,7 +72,7 @@ qq_file.lde = function(buf, session)
 			  if (buf:len() >= 2) then
 			  if (state == gstate.init and buf:getbyte(0) == 0x04 and buf:getbyte(-1) == 0x03) then
 				  if (buf:dir() == pkb_dir.up) then
-				  	 session:saveindex(1, 2, proto_list_index("lde") - 1)
+				  	 session:saveindex(1, 2, engine_list_index["lde"] - 1)
                      --save和load的最后一个参数都是slot，一般使用本引擎所在的slot，但如果要记录多个参数，也可以借用其他引擎的slot
 				  	 state = gstate.s1
 				  end
@@ -60,7 +81,7 @@ qq_file.lde = function(buf, session)
 			  end
 
 			  if (state == gstate.s1 and buf:dir() == pkb_dir.down) then
-			     if (buf(1,2):uintbe() == session:loadnum(proto_list_index("lde") - 1)) then
+			     if (buf(1,2):uintbe() == session:loadnum(engine_list_index["lde"] - 1)) then
 				 	state = gstate.final
 				 end
 			  end
