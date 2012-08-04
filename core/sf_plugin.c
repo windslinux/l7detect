@@ -201,7 +201,10 @@ static int32_t sf_plugin_process(module_info_t *this, void *data)
 
 	if (proto_comm->app_id != INVALID_PROTO_ID) {
 		packet->app_type = proto_comm->app_id;
-	}
+	} else if (proto_comm->state == 0) {
+        /*app_id没有匹配，并且state为0，说明没有什么可以再匹配的，那么直接置成最终状态，释放内存*/
+        proto_comm->state = pconf->final_state;
+    }
 
     if (proto_comm->state != pconf->final_state) {
         int32_t status;
