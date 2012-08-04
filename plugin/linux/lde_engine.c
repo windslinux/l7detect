@@ -178,7 +178,6 @@ static int32_t lde_engine_process(module_info_t *this, void *data)
 								 proto_comm->match_mask, lde_engine_id, &tag, 1,
 								 &state);
 
-	longmask_all_clr(proto_comm->match_mask[lde_engine_id]);
 	if (app_id < 0) {
 		app_id = handle_engine_appid(conf, gp->lde_cur,
 									 CS_ENG_TYPE, lde_match,  lp,
