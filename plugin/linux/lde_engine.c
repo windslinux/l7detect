@@ -161,6 +161,7 @@ static int32_t lde_engine_process(module_info_t *this, void *data)
 	sf_proto_conf_t *conf;
 	uint32_t tag = 0;
 	int32_t app_id;
+    uint32_t old_app_id;
 	int32_t state = 0;
 
 	proto_comm = (proto_comm_t *)data;
@@ -172,11 +173,13 @@ static int32_t lde_engine_process(module_info_t *this, void *data)
 	lp->packet = packet;
 	lp->proto_comm = proto_comm;
     proto_comm->engine_id = lde_engine_id;
+    old_app_id = proto_comm->app_id;
 
 	app_id = handle_engine_appid(conf, proto_comm->match_mask[lde_engine_id],
                                  CS_ENG_TYPE, lde_match, lp,
 								 proto_comm->match_mask, lde_engine_id, &tag, 1,
 								 &state);
+
 
 	if (app_id < 0) {
 		app_id = handle_engine_appid(conf, gp->lde_cur,
@@ -185,6 +188,15 @@ static int32_t lde_engine_process(module_info_t *this, void *data)
 									 &state);
 
 	}
+    if (old_app_id != proto_comm->app_id) {
+        /*通过脚本修改了app_type，这里直接替换协议号*/
+        if (proto_comm->app_id < conf->total_proto_num) {
+            app_id = proto_comm->app_id;
+        } else {
+            log_error(pt_log, "Can not replace protoid %d:Over range\n", proto_comm->app_id);
+        }
+    }
+
 	if (app_id >= 0) {
 		proto_comm->app_id = app_id;
 		proto_comm->state = state;

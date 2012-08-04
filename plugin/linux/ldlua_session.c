@@ -12,6 +12,7 @@ LDLUA_METHOD session_loadnum(lua_State* L);
 LDLUA_METHOD session_loadstr(lua_State* L);
 LDLUA_METHOD session_gc(lua_State *L);
 LDLUA_METHOD session_state(lua_State *L);
+LDLUA_METHOD session_replace_type(lua_State* L);
 
 LDLUA_CLASS_DEFINE(session,FAIL_ON_NULL("expired session"),NOP);
 
@@ -22,6 +23,7 @@ static const luaL_reg session_methods[] = {
 	{"loadnum", session_loadnum},
 	{"loadstr", session_loadstr},
 	{"state", session_state},
+	{"apptype", session_replace_type},
     { NULL, NULL },
 };
 
@@ -109,6 +111,16 @@ LDLUA_METHOD session_state(lua_State* L)
 	session ss = check_session(L, 1);
 	lua_pushnumber(L, ss->state);
 	return 1;
+}
+
+LDLUA_METHOD session_replace_type(lua_State* L)
+{
+#define LDLUA_SESSION_TYPE 2
+	session ss = check_session(L, 1);
+    uint32_t app_id = luaL_optint(L, LDLUA_SESSION_TYPE, 0);
+    ss->app_id = app_id;
+
+	return 0;
 }
 
 LDLUA_METHOD session_loadnum(lua_State* L)
