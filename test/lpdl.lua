@@ -26,7 +26,7 @@ sde.conf = {
                                                     各种可能性之间用|分割开，分割线的前后是上一段的结束和下一段的开始
                     {["0"]="fe", ["3~5|-5~-1"]="0304|05fe|abcd"}, --索引为0值为fe，并且（一个花括号内的多个索引值为与的关系）\
                                                             索引3~5之间或者-5~-1（最后一个字节）之间有序列为:030405fe
-                    {["0"]="fd", ["2~4"]=3456},           --或者（多个花括号之间是或的关系）索引为0的值为fe，并且索引2~4之间的序列为3456
+                    {["0"]="fd", ["2~4"]="3456"},           --或者（多个花括号之间是或的关系）索引为0的值为fe，并且索引2~4之间的序列为3456
                 }
     demo_proto.lde = function(buf, session)
 			  local state = gstate.init
@@ -42,7 +42,7 @@ sde.conf = {
 test = {}
 test.pde = "udp/8000"
 test.sde = {
-                {["0"]="fe", ["2-3|1~5"]="42000042|(zhou)"}
+                {["1"]="fe", ["2-3|1~5"]="42000042|(zhou)"}
             }
 
 qq_file = {}
@@ -83,14 +83,16 @@ ppstream.lde = function(buf, session)
 			   end
 
 qqlive = {}
+qqlive.sde = {
+                {["0"]="fe"}
+             }
 qqlive.lde = function(buf, session)
 			  	 local state = gstate.init
 				 -- ppsteam head length is 4
 				     if (buf:len() >= 5) then
 					 local val1 = buf(1,2):uintle()
 					 local val2 = buf(3,2):uintbe()
-				     if (buf:getbyte(0) == 0xfe and val1 == buf:len()-3 and
-				         val1 == val2) then
+				     if (val1 == buf:len()-3 and val1 == val2) then
 				         state = gstate.final
 			      	 end
 				 end
