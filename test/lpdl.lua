@@ -5,7 +5,7 @@ proto_list={"test", "ppstream", "qqlive", "http", "dns", "ssl", "nat",
 cs_eng_list={"pde", "sde", "lde"} --协议初步识别引擎
 as_eng_list={"cdde"}  --协议进一步识别引擎
 pkb_dir = {up=1, down=2}
-
+l4_proto = {tcp=6, udp=17}
 eng_list={}
 proto_list_index = {}
 eng_list_index = {}
@@ -88,20 +88,49 @@ qq_file.lde = function(buf, session)
 			  return state
 			  end
 
+
 ppstream = {}
-ppstream.lde = function(buf, session)
-			   local state
-			   local len = buf:len()
-			   -- ppstream head length is 4
-			   if (len >= 4) then
-			   	   local buf_hd = buf(0,2):uintle()
-				   if (buf:getbyte(2) == 0x43 and buf:getbyte(3) == 0 and
-				   	   (buf_hd == len or buf_hd == (len-4))) then
-				       state = gstate.final
-				   end
-			   end
-			   return state
-			   end
+ppstream.sde = {
+                    {["2"]="43"},
+                    {["3"]="00"},
+                    {["4"]="03"},
+                    {["0"]="(PSProtocol)"}
+                }
+ppstream.lde =
+function(buf, session)
+    local state = session:state()
+	local len = buf:len()
+    local proto = buf:proto()
+    if (proto == l4_proto.tcp) then
+        if (len >= 60 and buf(50, 4):uintbe() == 0x0 and buf(0, 10):string() == "PSProtocol") then
+            state = gstate.final
+        end
+        return state
+    end
+
+    if (proto == l4_proto.udp) then
+	    local buf_hd = buf(0,2):uintle()
+        if (len >2 and buf:getbyte(2) == 0x43 and (((len - 4) == buf_hd)
+            or (len == buf_hd) or (len >= 6 and (len - 6) == buf_hd))) then
+            state = state + 1
+            if (state == 5) then
+                state = gstate.final
+            end
+            return state
+        end
+        if (state == 0 and len > 4 and (((len - 4) == buf_hd)
+            or (len ==buf_hd) or (len >= 6 and (len - 6) == buf_hd))) then
+            state = gstate.s7
+            return state
+        end
+        if (state == gstate.s7 and len > 4 and buf:getbyte(3) == 0x0 and (((len - 4) == buf_hd)
+            or (len == buf_hd) or (len >= 6 and (len - 6) == buf_hd)) and buf:getbyte(2) == 0x0 and
+            buf:getbyte(4) == 0x3) then
+            state = gstate.final
+        end
+    end
+    return state
+end
 
 qqlive = {}
 qqlive.sde = {
