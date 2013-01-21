@@ -109,6 +109,9 @@ function(buf, session)
     end
 
     if (proto == l4_proto.udp) then
+        if (len < 2) then
+            return state
+        end
 	    local buf_hd = buf(0,2):uintle()
         if (len >2 and buf:getbyte(2) == 0x43 and (((len - 4) == buf_hd)
             or (len == buf_hd) or (len >= 6 and (len - 6) == buf_hd))) then
