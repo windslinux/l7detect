@@ -29,6 +29,7 @@
 #define MAX_DFA_RESULT     (16)
 #define MAX_TID_RESULT     (32)
 #define TIDHD_MASK_BIT_NUM (1024)
+#define JUDGE_OFFSET(offset) ((offset) < 0 ? ((offset) + MAX_PACKET_LEN) : (offset))
 
 static int32_t sde_engine_init_global(module_info_t *this);
 static int32_t sde_engine_init_local(module_info_t *this, uint32_t thread_id);
@@ -358,7 +359,7 @@ static void __fetch_sde_key(common_data_t *data, list_head_t *head, range_head_t
             }
             i++;
             range_hd[j].range_num++;
-            if (range_hd[j].ranges[i].min > range_hd[j].ranges[i].max) {
+            if (JUDGE_OFFSET(range_hd[j].ranges[i].min) > JUDGE_OFFSET(range_hd[j].ranges[i].max)) {
                 swap(range_hd[j].ranges[i].min, range_hd[j].ranges[i].max);
             }
         }
@@ -567,8 +568,8 @@ static uint32_t pstr_get_graph_id(info_global_t *gp, pattern_head_t *pat_head, r
     for (i=0; i<gp->graph_num; i++) {
         info = &gp->graph_info[i];
         for (j=0; j<info->pattern_range_num; j++) {
-            if (info->pattern_ranges[j].min <= range->min &&
-                info->pattern_ranges[j].max >= range->max) {
+            if (JUDGE_OFFSET(info->pattern_ranges[j].min) <= JUDGE_OFFSET(range->min) &&
+                JUDGE_OFFSET(info->pattern_ranges[j].max) >= JUDGE_OFFSET(range->max)) {
                 return i;
             }
         }
@@ -1111,11 +1112,11 @@ static int32_t sde_engine_process(module_info_t *this, void *data)
 	}
 	if (app_id >= 0) {
 		proto_comm->app_id = app_id;
-		proto_comm->state = gp->conf->final_state;
+	    proto_comm->state = gp->conf->final_state;
 	} else {
 		proto_comm->app_id = INVALID_PROTO_ID;
+	    proto_comm->state = 0;
 	}
-
     return tag;
 }
 

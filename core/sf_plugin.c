@@ -180,6 +180,9 @@ static int32_t sf_plugin_process(module_info_t *this, void *data)
 			protobuf_node_t *node = list_entry(p, protobuf_node_t, list);
 			assert(node->match_mask);
 			longmask_copy(proto_comm->match_mask[node->engine_id], node->match_mask);
+            /*只有设置了掩码的才跳过去匹配，否则可能是lua脚本里面借用的空间临时存放数据*/
+            if (longmask_bit1_find(proto_comm->match_mask[node->engine_id], 0) < 0)
+                continue;
 			if (!init_tag) {
 				init_tag = node->engine_id + 1;
 			}
@@ -191,12 +194,6 @@ static int32_t sf_plugin_process(module_info_t *this, void *data)
 		}
 		init_tag = -1;
 	}
-    if (init_tag <= 0) {
-        if (session_comm->engine_id != 0) {
-            init_tag = session_comm->engine_id + 1;
-        }
-    }
-
 
 	if (gp->plugin_num) {
 		module_list_process(gp->plugin, gp->tag, init_tag, proto_comm);
@@ -204,7 +201,20 @@ static int32_t sf_plugin_process(module_info_t *this, void *data)
 
 	if (proto_comm->app_id != INVALID_PROTO_ID) {
 		packet->app_type = proto_comm->app_id;
-	}
+	} else if (proto_comm->state == 0) {
+        /*app_id没有匹配，并且state为0，说明没有什么可以再匹配的，那么直接置成最终状态，释放内存*/
+        proto_comm->state = pconf->final_state;
+    }
+
+    if (proto_comm->state != pconf->final_state) {
+        int32_t status;
+
+		status = protobuf_setmask(proto_comm->protobuf_head, proto_comm->engine_id,
+                proto_comm->app_id, proto_comm->match_mask[proto_comm->engine_id]);
+		if (status != 0) {
+			log_error(syslog_p, "protobuf setmask error, status %d\n", status);
+		}
+    }
 	packet->pktag = parsed_tag;
 /*sf_plugin必须要再次回到会话模块，不能直接退出，否则将会导致有的会话一直处于dirty状态，导致死循环*/
 	return packet->pktag;

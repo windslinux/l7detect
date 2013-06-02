@@ -152,22 +152,17 @@ static int32_t cdde_engine_process(module_info_t *this, void *data)
 	info_local_t *lp;
 	sf_proto_conf_t *conf;
 	uint32_t tag = 0;
-	int32_t app_id;
 	int32_t state = 0;
 
 	proto_comm = (proto_comm_t *)data;
 	packet = proto_comm->packet;
 	gp = (info_global_t *)this->pub_rep;
 	conf = gp->conf;
-    app_id = proto_comm->app_id;
 
     lp = (info_local_t *)module_priv_rep_get(this, proto_comm->thread_id);
 	lp->packet = packet;
 	lp->proto_comm = proto_comm;
-	longmask_all_clr(proto_comm->match_mask[cdde_engine_id]);
-    longmask_bit_set(proto_comm->match_mask[cdde_engine_id], app_id);
     proto_comm->engine_id = cdde_engine_id;
-
 	handle_engine_appid(conf, proto_comm->match_mask[cdde_engine_id],
                                  AS_ENG_TYPE, cdde_match, lp,
 								 proto_comm->match_mask, cdde_engine_id, &tag, 1,

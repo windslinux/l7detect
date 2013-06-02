@@ -4,6 +4,7 @@
 #include "parser.h"
 #include "list.h"
 #include "code.h"
+#include "conf.h"
 #include "longmask.h"
 #include "helper.h"
 
@@ -91,6 +92,7 @@ static inline int32_t protobuf_setmask(list_head_t *head, uint32_t engine_id,
 		}
 	}
 
+    node->engine_id = engine_id;
 	node->match_mask = longmask_create(mask->bit_num);
 
 	if (node->match_mask == NULL) {
@@ -100,9 +102,11 @@ static inline int32_t protobuf_setmask(list_head_t *head, uint32_t engine_id,
 	}
 	longmask_copy(node->match_mask, mask);
 
-	for (i=0; i<app_id; i++) {
-		longmask_bit_clr(node->match_mask, i);
-	}
+    if (app_id != INVALID_PROTO_ID) {
+	    for (i=0; i<app_id; i++) {
+		    longmask_bit_clr(node->match_mask, i);
+	    }
+    }
 
 	return 0;
 }

@@ -84,8 +84,8 @@ struct session_item {
 #define SESSION_NO_TIMEOUT 0x20
 	uint16_t flag:14;
 	uint16_t stage;
-    uint16_t engine_id;
-	uint16_t reserved;
+    //uint16_t engine_id;
+	uint32_t reserved;
 	sys_time_t start_time;
 	sys_time_t last_time;
 	uint32_t app_type;			/**<  协议小类*/
@@ -322,8 +322,8 @@ static void __print_item(info_global_t *info, session_item_t *item)
 		swap(ip0_int, ip1_int);
 		swap(port0, port1);
 	}
-	/*源ip，源端口，目的ip, 目的端口，协议类型，上行包数，下行包数，上行字节数，下行字节数*/
-	log_print(info->log_c, "%s,%d,%s,%d,%s,%d,%d,%d,%d,%s\n",
+	/*源ip，源端口，目的ip, 目的端口，协议类型，上行包数，下行包数，上行字节数，下行字节数, 应用协议, 状态*/
+	log_print(info->log_c, "%s,%d,%s,%d,%s,%d,%d,%d,%d,%s,%d\n",
 			   inet_ntop(AF_INET, &ip0_int, ip0, sizeof(ip0)),
 			   port0,
 			   inet_ntop(AF_INET, &ip1_int, ip1, sizeof(ip1)),
@@ -332,7 +332,7 @@ static void __print_item(info_global_t *info, session_item_t *item)
 			  item->flow[0].pkts, item->flow[1].pkts,
 			  item->flow[0].bytes, item->flow[1].bytes,
 			  (item->app_type != INVALID_PROTO_ID) ?
-			  info->sf_conf->protos[item->app_type].name:"Unknown");
+			  info->sf_conf->protos[item->app_type].name:"Unknown", item->app_state);
 }
 
 static inline void __session_return_handle(info_local_t *this, packet_t *packet, session_item_t *session)
@@ -392,10 +392,9 @@ static inline uint32_t __post_parsed(info_local_t *this, hash_table_hd_t *hd,
             }
             session->flag |= SESSION_NO_TIMEOUT;
         }
-		session->app_state = comm->state;
-        /*mask在sf_plugin模块中已经被修改*/
 	}
-    session->engine_id  = comm->engine_id;
+	session->app_state = comm->state;
+    /*mask在sf_plugin模块中已经被修改*/
     __session_return_handle(this, packet, session);
     hash_table_unlock(hd, session->index.hash, 0);
 	return packet->pktag;
@@ -763,7 +762,6 @@ static void* session_frm_result_get(module_info_t *this)
 	    assert(info->session);
 	    info->proto_buf.state = info->session->app_state;
 	    info->proto_buf.protobuf_head = &info->session->protobuf_head;
-        info->proto_buf.engine_id = info->session->engine_id;
         info->proto_buf.app_id = info->session->app_type;
 	    return &info->proto_buf;
     }
