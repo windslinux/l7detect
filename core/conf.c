@@ -145,11 +145,11 @@ void __common_data_create_add(const char *key, const char *value, common_data_he
     assert(data);
 
     if (key != NULL) {
-        data->key = malloc(strlen(key));
+        data->key = malloc(strlen(key) + 1);
         strcpy(data->key, key);
     }
     if (value != NULL) {
-        data->value = malloc(strlen(value));
+        data->value = malloc(strlen(value) + 1);
         strcpy(data->value, value);
     }
     list_add_tail(&data->list, head);
@@ -381,7 +381,6 @@ sf_proto_conf_t *__proto_conf_read()
 	}
 
 	__proto_conf_show(sf_conf);
-
     assert(lua_gettop(L) == 0);
 	lua_close(L);
 	return sf_conf;
