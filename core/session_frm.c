@@ -164,7 +164,7 @@ static void __flow_timer_process(evutil_socket_t fd, short which, void *arg)
 
     hash_table_lock(hd, info->timer.bucket, 0);
     hash_table_one_bucket_for_each(hd, info->timer.bucket, item) {
-        if (sys_time_diff(item->last_time, current) >= conf->session_expire_time) {
+        if (sys_time_diff(item->last_time, current) >= (int32_t)conf->session_expire_time) {
             if ((item->flag & SESSION_DIRTY) || (item->flag & SESSION_NO_TIMEOUT)) {
                 continue;
             }
@@ -188,7 +188,7 @@ static void __flow_timer_process(evutil_socket_t fd, short which, void *arg)
                 port = current_item->port;
                 ff_hash = ff_table_hash(ff_hd, ip, port);
                 ff_table_lock(ff_hd, ff_hash);
-                if (sys_time_diff(ff_item->last_time, current) >= conf->session_expire_time) {
+                if (sys_time_diff(ff_item->last_time, current) >= (int32_t)conf->session_expire_time) {
                     rv = ff_table_delete(ff_hd, ff_hash, current_item);
                     if (rv != 0) {
             		    log_error(syslog_p, "remove ff_item error, status %d\n", rv);
